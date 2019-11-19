@@ -2,9 +2,9 @@
 
 A snakemake pipeline for performing QC on WGS VCF files. Includes QCs for Minor Allele Frequency (MAF), Hardy Weinberg Equilibrium (HWE), Relatedness, and Missingness (sample and SNP). Takes in a gzipped vcf file.
 
-#Command
+# Command
 
-source snakejob <path to config.yaml>
+source snakejob [path to config.yaml]
 
 # Config Options
 
