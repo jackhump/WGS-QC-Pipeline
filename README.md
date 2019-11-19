@@ -19,7 +19,7 @@ File Configs
 *gzvcf_suffix*: Suffix for gzipped vcf file. Used to extract file names.
 
 
-*QC Metrics
+QC Metrics
 
 *MISS_THRESH_SNP*: Threshold of missingness of a SNP, above which we exlude SNP from analysis. Default is 0.15
 
