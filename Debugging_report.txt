@@ -1,0 +1,18 @@
+#Debugging
+#Error1: config.yaml not referenced properly. Seems that if statement to input default config.yaml is not accepting the default file. Come back
+#Error2: make sure to delete Cluster folder on subsequent runs or else it will cause an error. Rename Cluster to include runID
+#Error3: config.yaml format is wrong. No "=", instead ": "
+#Error4: All snakemake shell scripts must be in quotes. Create a separate script to reference commands so I don't have to escape quotes every time
+#Error5: None of the inputs, outputs, or params should have $ in front of variables
+#Error6: Commas in lists of inputs, outputs, or params
+#Error7: gzvcf_suffix not defined. Added in the line to define it.
+#Error8: Need to create a rule all to define which files to output
+#Error9: Correct rule all so that it uses expand function
+#Error10: vcftools --out has file extension. Will declare parameter with filenames to make output file
+#Error11: Error in rule1 code. Tested it in command line and it works fine. Best idea is that module loaded before is not retained
+#Error12: Error11's fix might be necessary, but also, need to put semi colons at the end of each bash line or it doesn't know to end apparently. I don't know if this expands to the scripts run as well, but i dont think so
+#Error13: Missed a "params." in 2 places in rule 2
+#Error14: It seems like snakemake does not like how I executed a script within the shell section. Try ./ instead of source. I don't want to have to escape every quote
+#Error15: Jk Error14 is from snakeRefScript1 itself. Also I accidentally call the wrong script in rule Filter3. Fixed the second point.
+#Error16: It seems as if the rules don't like variables initially declared in config. Redeclaring those variables in the params section of respective rules
+#Error17: Still need to test Error16's fix, but another error popped up where scientific notation in relatedness_file is messing up script. Implemented fix via sed script that changes scientific notation to *10^ notation
