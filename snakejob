@@ -1,0 +1,57 @@
+#1) Exit script if a command fails (has a non-zero status). Loads Packages
+#set -e
+module load vcftools/0.1.15
+
+#Initialize environments and load packages
+conda activate 191115_vcf_QC_snakemake_env
+
+    #backup commands to create environment
+    #conda create –n 191115_vcf_QC_snakemake_env
+    #conda config --add channels bioconda
+    #conda config --add channels defaults
+    #conda config --add channels conda-forge
+    #conda install snakemake
+
+#2) Make a folder named runInfo if it doesn't already exist. This folder will contain run errors and outputs
+if [ ! -d "runInfo" ]; then
+  mkdir runInfo
+fi
+
+#3) Makes the current directory into the job name
+curdir="$(pwd)"
+jname="$(basename $curdir)"
+
+#4) Read in config file as first argument. If no config file is specified, rely on a default within this file's directory
+#Error. Default config_file specification is not working. Maybe it needs quotes? Will try that eventually
+config=$1
+if [ -z $config ]; then
+        config_file=config.yaml
+else
+    	config_file=$config
+fi
+
+#5) Establish parameters for job submission for the later snakemake command
+bsub=("bsub -K -J $jname:{rule}:{wildcards}"
+"-P acc_als-omics "
+"-q {cluster.queue} "
+"-n {cluster.cores} -R \"span[hosts=1] select[mem>{cluster.mem}]"
+"rusage[mem={cluster.mem}]\" -W {cluster.time} -L /bin/bash"
+"-oo runInfo/{rule}.stdout"
+"-eo runInfo/{rule}.stderr < ")
+
+#bsub=("bsub -K -J $jname:{rule}:{wildcards}"
+#"-P acc_als-omics "
+#"-q {cluster.queue} "
+#"-n {cluster.cores} -R \"span[hosts=1] select[mem>{cluster.mem}]"
+#"rusage[mem={cluster.mem}]\" -W {cluster.time} -L /bin/bash"
+#"-oo runInfo/{rule}:{wildcards}.stdout"
+#"-eo runInfo/{rule}:{wildcards}.stderr < ")
+
+#6) Snakemake command
+snakemake --cluster-config cluster.yaml --cluster-sync "${bsub[*]}" --latency-wait 15 --local-cores 4 --max-jobs-per-second 5 --jobs 1000 -s snakefile --configfile $config_file
+
+#dry run command
+#snakemake --verbose --dry-run -r --cluster-config cluster.yaml --cluster-sync "${bsub[*]}" --latency-wait 15 --local-cores 4 --max-jobs-per-second 5 --jobs 1000 -s snakefile --configfile $config_file
+
+#?
+#Local-cores in snakemake is 4 but cores from the cluster.yaml is 1. Is this in conflict?

@@ -1,0 +1,17 @@
+#Note1: I don't think MAF makes sense for triallelic+ sites. I'm not sure about HWE, but I wouldn't think so either. Handle these at the end of the filters
+#Skip InbreedingCoeff for now because I need to merge before performing that
+#Include paper's default values in my config file
+#adjust sample1 and sample2 to params.sample1 and params.sample2
+
+#Error1: String manipulation in the beginning of the code. Used quotes around a variable making it a strings
+#Error2: real regex needs an escape character for . after "chr"
+#Error3: input cannot use variables from params. Put all rules within for loop so it performs rules on all files without doing combinations of file names
+#Error4: as a result, params.sample1 -> sample1, and same for sample2
+#Error5: Rule to combine chromosomes also needs wildcards specified
+#Error6: Input is looking for double forward slash as a result of improper string parsing
+#Error7: Combine biallelics use a looping mechanism that isnt allowed in snakemake. Concatenate as a work around
+#Error8: Also, the forward slashes are causing some unexpected file parsing behavior. Evaluate
+#Error9: Several semicolon, comma, and underscore missing characters fixed.
+#...
+#Error20: Tabix file is older than original gzipped? Doesn't make much sense since the tabix is created after the vcf.gz. Read while pipeline is running
+#Error21: No idea about the previous, but maybe its encountering an error because of bgzip overriding its own output file? Investigate

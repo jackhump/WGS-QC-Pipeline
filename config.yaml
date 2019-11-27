@@ -1,0 +1,19 @@
+#File Reading
+inFolder: "191120_test/input"
+outFolder: "191120_test/output"
+tempFolder: "191120_test/temp"
+statsFolder: "191120_test/stats"
+gzvcf_suffix: ".vcf.gz"
+
+#QC Metrics
+MISS_THRESH_SNP: 0.15
+ODP: 25000 #Overall Read Depth
+MQ_MIN: 58.75 #Mapping Quality lower threshold
+MQ_MAX: 61.25 #Mapping Quality upper threshold
+VQSLOD: 7.81 #lower threshold for VQSLOD
+GDP: 10 #Genotype level read depth
+GQ: 20 #Genome Quality
+INBREEDING_COEF: -0.8
+
+MISS_THRESH_INDI: .1
+RELATEDNESS_THRESH: .125
