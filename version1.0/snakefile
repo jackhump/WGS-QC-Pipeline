@@ -196,7 +196,7 @@ for sample in range(len(samples)):
             #sample2 = samples[sample][1]
         shell:
             "module load vcflib/v1.0.0-rc0; module load bcftools/1.9;"
-            "tabix -p vcf {input.Filter1}"
+            "tabix -p vcf {input.Filter1};"
             "vcffilter -g \"DP > {params.GDP_thresh}\" {input.Filter1} | bgzip -c > {output.Filter2};"
             "bcftools stats {output.Filter2} > {output.stats};"
 
