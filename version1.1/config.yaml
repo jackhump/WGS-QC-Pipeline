@@ -1,0 +1,26 @@
+#File Reading
+inFolder: "191206_allChr/input"
+outFolder: "191206_allChr/output"
+tempFolder: "191206_allChr/temp"
+statsFolder: "191206_allChr/stats"
+gzvcf_suffix: ".vcf.gz"
+
+#Options
+#keepAllFiles: False #If True, keeps the results of the individual filters. If false, only keeps the final output files, and statistics
+splitFinalVCF: False #If true, splits the final vcf on chromosome and writes them to separate files in the output folder
+
+#Chunking Metric
+NUM_CHUNK: 4 #how much to break up each chromosome. Higher values will run faster but reserve more nodes
+chromosomeLengths: "Accessory_Scripts/hg19_chrSizes.txt"
+
+#QC Metrics
+GDP: 10 #Genotype level read depth
+GQ: 20 #Genome Quality
+MISS_THRESH_SNP: 0.15 #Missingness threshold for a SNP to be excluded. Default is .15
+ODP: 5000 #Overall Read Depth #paper uses 25000, but that's too large for the ALS data
+MQ_MIN: 58.75 #Mapping Quality lower threshold
+MQ_MAX: 61.25 #Mapping Quality upper threshold
+VQSLOD: 7.81 #lower threshold for VQSLOD
+INBREEDING_COEF: -0.8 #analogous to HWE. Default: -0.8
+MISS_THRESH_INDI: .1 #Missingness threshold for an individual to be excluded. Default is .1
+RELATEDNESS_THRESH: .125 #Relatedness threshold based on the King et al method (Relatedness2 option in vcftools). Default is .125 (first cousins)
