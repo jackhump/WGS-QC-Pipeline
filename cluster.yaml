@@ -1,0 +1,9 @@
+__default__:
+  #partition: chimera
+  queue: testbode
+  cores: 1
+  mem: 10000
+  time: '1440'
+  name: $(basename $(pwd)):{rule}:{wildcards}
+  output: logs/{rule}:{wildcards}.stdout
+  error: logs/{rule}:{wildcards}.stderr
