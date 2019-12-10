@@ -4,7 +4,7 @@ A snakemake pipeline for performing QC on WGS VCF files. Includes QCs for Minor 
 
 Based on script in Adelson et al. 2019
 
-Currently version: 0.3
+Currently version: 1.2
 
 # Command
 
@@ -47,7 +47,9 @@ QC Metrics
 
 *RELATEDNESS_THRESH*: Threshold of relatedness, above which we exclude a Sample based on relation to other Samples. Default is .125
 
+# Known bugs
 
+High chunk number will cause empty files to be written. At some point, shift chunking over to SnpSift to chunk based on file size rather than chromosome location. Will also speed up chunking related processes. 
 
 # Conda recipe
 
@@ -64,13 +66,23 @@ conda install snakemake
 # Filter Levels
 
 Filter0: Separate out Biallelics
+
 Filter1: Filter for GATK Passes
+
 Filter2: Filter for genotype level depth (DP) (GDP)
+
 Filter3: Filter for Genome Quality (GQ)
+
 Filter4: Filter for SNP missingness
+
 Filter5: Filter for Overall Read Depth (DP) (ODP)
+
 Filter6: Filter for Mapping Quality (MQ)
+
 Filter7: Filter SNPs for VQSLOD
+
 Filter8: Filter via Inbreeding_Coef
+
 Filter9: Filter via Sample level Missingness
+
 Filter10: Filter via Relatedness
