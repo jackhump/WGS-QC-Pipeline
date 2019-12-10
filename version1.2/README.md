@@ -12,6 +12,7 @@ source snakejob [path to config.yaml]
 
 # Config Options
 
+
 General Options
 
 *splitFinalVCF*: If true, splits the final output vcf.gz to create per chromosome vcf.gz files
@@ -29,6 +30,7 @@ Chunking Metrics
 
 
 
+
 File Configs
 
 *inFolder*: Folder where input files are located
@@ -40,6 +42,8 @@ File Configs
 *statsFolder*: Folder where stats are stored.
 
 *gzvcf_suffix*: Suffix for gzipped vcf file. Used to extract file names.
+
+
 
 
 QC Metrics
