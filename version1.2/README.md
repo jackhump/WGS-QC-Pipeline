@@ -19,14 +19,14 @@ General Options
 
 *blacklist*: If true, filters initially based on blacklist file provided
 
-*blactlist_file*: Path to blacklist file. hg38 blacklist is contained within Accessory_Scripts folder
+*blacklist_file*: Path to blacklist file. hg38 blacklist is contained within Accessory_Scripts folder. Blacklist was taken from http://mitra.stanford.edu/kundaje/akundaje/release/blacklists/hg38-human/
 
 
 Chunking Metrics
 
 *NUM_CHUNK*: How much to break up the chromosome. For example, if 4, every chromosome will be broken in four and processed in parallel. Too high values may cause bugs
 
-*chromosomeLengths*: File of chromosome lengths. Used for chunking
+*chromosomeLengths*: File of chromosome lengths. Used for chunking. hg38 chromosome sizes is contained within Accessory_Scripts folder. Sizes were taken from IGV at https://github.com/igvteam/igv/blob/master/genomes/sizes/hg38.chrom.sizes
 
 
 
