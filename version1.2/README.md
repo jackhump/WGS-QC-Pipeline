@@ -8,7 +8,7 @@ Currently version: 1.2
 
 # Command
 
-source snakejob [path to config.yaml]
+bsub < snakejob [path to config.yaml]
 
 # Config Options
 
