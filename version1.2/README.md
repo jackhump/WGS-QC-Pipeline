@@ -76,6 +76,10 @@ Shift from vcf-concat to bcftools concat (might be faster)
 Chunk bug fix (referenced below)
 If blacklist is true, but no path to a file is provided, use default
 
+Test if current blacklist step works.
+Test imiss filtration
+Test if current bsub command works
+
 # Known bugs
 
 High chunk number will cause empty files to be written. At some point, shift chunking over to SnpSift to chunk based on file size rather than chromosome location. Will also speed up chunking related processes. 
