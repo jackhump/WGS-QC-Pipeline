@@ -12,6 +12,23 @@ source snakejob [path to config.yaml]
 
 # Config Options
 
+General Options
+
+*splitFinalVCF*: If true, splits the final output vcf.gz to create per chromosome vcf.gz files
+
+*blacklist*: If true, filters initially based on blacklist file provided
+
+*blactlist_file*: Path to blacklist file. hg38 blacklist is contained within Accessory_Scripts folder
+
+
+Chunking Metrics
+
+*NUM_CHUNK*: How much to break up the chromosome. For example, if 4, every chromosome will be broken in four and processed in parallel. Too high values may cause bugs
+
+*chromosomeLengths*: File of chromosome lengths. Used for chunking
+
+
+
 File Configs
 
 *inFolder*: Folder where input files are located
@@ -29,7 +46,7 @@ QC Metrics
 
 *MISS_THRESH_SNP*: Threshold of missingness of a SNP, above which we exlude SNP from analysis. Default is 0.15
 
-*ODP*: Overall Read Depth. Default is 25000
+*ODP*: Overall Read Depth. Default is 5000. Paper's default is 25000. Should be dependent on total number of samples in cohort, and coverage. 
 
 *MQ_MIN*: Mapping Quality lower threshold. Default is 58.75
 
@@ -46,6 +63,14 @@ QC Metrics
 *MISS_THRESH_INDI*: Threshold of missingness of a Sample, above which we exclude Sample from analysis. Default is .1
 
 *RELATEDNESS_THRESH*: Threshold of relatedness, above which we exclude a Sample based on relation to other Samples. Default is .125
+
+# To do
+
+Enable option to make intermediate outputs temporary
+Include plotting options
+Shift from vcf-concat to bcftools concat (might be faster)
+Chunk bug fix (referenced below)
+If blacklist is true, but no path to a file is provided, use default
 
 # Known bugs
 
@@ -64,6 +89,10 @@ conda config --add channels conda-forge
 conda install snakemake
 
 # Filter Levels
+
+Filter-1: Filter for provided blacklist, if any
+
+Chunk: Chunks chromosomes, if chunking value is set to >1
 
 Filter0: Separate out Biallelics
 
