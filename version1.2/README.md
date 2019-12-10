@@ -76,8 +76,7 @@ Shift from vcf-concat to bcftools concat (might be faster)
 Chunk bug fix (referenced below)
 If blacklist is true, but no path to a file is provided, use default
 
-Test if current blacklist step works.
-Test imiss filtration
+Test if current blacklist step works
 Test if current bsub command works
 
 # Known bugs
