@@ -13,7 +13,7 @@ blacklist_file: "Accessory_Scripts/hg38.blacklist.bed"
 
 #Chunking Metric
 NUM_CHUNK: 4 #how much to break up each chromosome. Higher values will run faster but reserve more nodes
-chromosomeLengths: "Accessory_Scripts/hg19_chrSizes.txt"
+chromosomeLengths: "Accessory_Scripts/hg38_chrSizes.txt"
 
 #QC Metrics
 GDP: 10 #Genotype level read depth
