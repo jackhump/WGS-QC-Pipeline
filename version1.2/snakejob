@@ -1,5 +1,5 @@
 #!/bin/bash
-#BSUB -J snakejob_QC_v1.1
+#BSUB -J snakejob_QC_v1.2
 #BSUB -P acc_als-omics
 #BSUB -q testbode
 #BSUB -n 10
