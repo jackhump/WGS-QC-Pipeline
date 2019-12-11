@@ -148,7 +148,7 @@ for sample in range(len(samples)):
         shell:
             "module load vcftools/0.1.15;"
             "module load bcftools/1.9;"
-            "vcftools --gzvcf {input.vcfgz} --exclude-positions {input.blacklist} --stdout --recode --recode-INFO-all | bgzip -c > {output.blacklist_filtered};"
+            "vcftools --gzvcf {input.vcfgz} --exclude-positions {input.blacklist_file} --stdout --recode --recode-INFO-all | bgzip -c > {output.blacklist_filtered};"
 
     #4) chunk
     if blacklist:
