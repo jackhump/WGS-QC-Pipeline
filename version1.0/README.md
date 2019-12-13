@@ -74,3 +74,9 @@ Filter7: Filter SNPs for VQSLOD
 Filter8: Filter via Inbreeding_Coef
 Filter9: Filter via Sample level Missingness
 Filter10: Filter via Relatedness
+
+# Version Changes
+
+Implemented bugfixes solving the interaction of snakemake and tabix
+Implemented post chromosomal recombining filters
+Implemented fix on Inbreeding Coefficient Filter
