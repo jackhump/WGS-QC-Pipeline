@@ -44,3 +44,7 @@ conda config --add channels defaults
 conda config --add channels conda-forge
 
 conda install snakemake
+
+# Version Changes
+
+Implemented various bugfixes. 
