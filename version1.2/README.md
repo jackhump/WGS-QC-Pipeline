@@ -4,6 +4,8 @@ A snakemake pipeline for performing QC on WGS VCF files. Includes QCs for Minor 
 
 Based on script in Adelson et al. 2019
 
+STABLE RELEASE
+
 Currently version: 1.2
 
 # Command
@@ -122,3 +124,10 @@ Filter8: Filter via Inbreeding_Coef
 Filter9: Filter via Sample level Missingness
 
 Filter10: Filter via Relatedness
+
+# Version Changes
+
+Implemented chunking. Speeds up pipeline run on all chromosomes.
+Implements Blacklist
+Implements option to split final vcf
+
