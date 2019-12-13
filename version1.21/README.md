@@ -4,7 +4,9 @@ A snakemake pipeline for performing QC on WGS VCF files. Includes QCs for Minor 
 
 Based on script in Adelson et al. 2019
 
-Currently version: 1.2
+EXPERIMENTAL RELEASE
+
+Currently version: 1.21
 
 # Command
 
