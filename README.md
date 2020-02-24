@@ -8,32 +8,54 @@ EXPERIMENTAL RELEASE
 
 Currently version: 1.21
 
-# Command
+# STEP 0: Estimate DP, MQ and VQSLOD parameters from your own data
 
-bsub < snakejob [path to config.yaml]
+using one of your autosomal VCF files (say chr22 for example), create diagnostic plots for the VCF parameters MQ (mapping quality), DP (total read depth) and VQSLOD (variant quality score log-odds):
+
+```
+cd scripts/
+sh get_quality_metrics <vcf.gz> <data code>
+```
+
+This will create the folder scripts/<data code> which will contain the raw numbers for each metric along with histograms of each metric.
+
+In our experience, MQ and VQSLOD do not change between datasets but DP does as it corresponds to the total read depth at each base - the average DP being the average per-sample read depth (usually 30X) multiplied by the sample number. 
+
+So 300 samples at 30x coverage should have a median DP of around 9000.
+ 
+
+
+# Parallel execution on MSSM HPC
+
+```
+./snakejob -c [path to config.yaml] <-n>
+```
+
+`-n` specifies dry run mode. Snakemake will list the steps that it plans to execute.
+
 
 # Config Options
 
 
-General Options
+###General Options
 
 *splitFinalVCF*: If true, splits the final output vcf.gz to create per chromosome vcf.gz files
 
 *blacklist*: If true, filters initially based on blacklist file provided
 
-*blacklist_file*: Path to blacklist file. hg38 blacklist is contained within Accessory_Scripts folder. Blacklist was taken from http://mitra.stanford.edu/kundaje/akundaje/release/blacklists/hg38-human/
+*blacklist_file*: Path to blacklist file. hg38 blacklist is contained within `/data` folder. Blacklist was taken from http://mitra.stanford.edu/kundaje/akundaje/release/blacklists/hg38-human/
 
 
-Chunking Metrics
+###Chunking Metrics
 
 *NUM_CHUNK*: How much to break up the chromosome. For example, if 4, every chromosome will be broken in four and processed in parallel. Too high values may cause bugs
 
-*chromosomeLengths*: File of chromosome lengths. Used for chunking. hg38 chromosome sizes is contained within Accessory_Scripts folder. Sizes were taken from IGV at https://github.com/igvteam/igv/blob/master/genomes/sizes/hg38.chrom.sizes
+*chromosomeLengths*: File of chromosome lengths. Used for chunking. hg38 chromosome sizes is contained within `data` folder. Sizes were taken from IGV at https://github.com/igvteam/igv/blob/master/genomes/sizes/hg38.chrom.sizes
 
 
 
 
-File Configs
+###File Configs
 
 *inFolder*: Folder where input files are located
 
@@ -48,11 +70,11 @@ File Configs
 
 
 
-QC Metrics
+###QC Metrics
 
 *MISS_THRESH_SNP*: Threshold of missingness of a SNP, above which we exlude SNP from analysis. Default is 0.15
 
-*ODP*: Overall Read Depth. Default is 5000. Paper's default is 25000. Should be dependent on total number of samples in cohort, and coverage.
+*ODP*: Overall Read Depth. Default is 5000. Paper's default is 25000. Should be dependent on total number of samples in cohort, and coverage. See Step 0.
 
 *MQ_MIN*: Mapping Quality lower threshold. Default is 58.75
 
