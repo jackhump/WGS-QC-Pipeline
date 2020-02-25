@@ -1,13 +1,16 @@
 #File Reading
 
 dataCode: "test"
-gzvcf_suffix: ".vcf.gz"
 
 #Options
 #keepAllFiles: False #If True, keeps the results of the individual filters. If false, only keeps the final output files, and statistics
 splitFinalVCF: False #If true, splits the final vcf on chromosome and writes them to separate files in the output folder
 filterBlacklist: True #if true, filters based on a provided blacklist file. Blast list must be put in input folder and be in bed format
 blacklistFile: "data/hg38.blacklist.bed"
+
+removeSamples: "data/2020_02_25_non_european_vcf_ids.txt"
+
+vcfFileList: "test/test_vcf_file.txt"
 
 #Chunking Metric
 NUM_CHUNK: 4 #how much to break up each chromosome. Higher values will run faster but reserve more nodes
@@ -23,4 +26,4 @@ MQ_MAX: 61.25 #Mapping Quality upper threshold
 VQSLOD: 7.81 #lower threshold for VQSLOD
 INBREEDING_COEF: -0.8 #analogous to HWE. Default: -0.8
 MISS_THRESH_INDI: .1 #Missingness threshold for an individual to be excluded. Default is .1
-RELATEDNESS_THRESH: .125 #Relatedness threshold based on the King et al method (Relatedness2 option in vcftools). Default is .125 (first cousins)
+RELATEDNESS_THRESH: .125 #Relatedness threshold based on the King et al method (Relatedness2 option)
