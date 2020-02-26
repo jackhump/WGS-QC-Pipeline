@@ -413,7 +413,7 @@ rule recombineChunks:
     shell:
         "vcf-concat {input} | bgzip -c > {output}"
 
-rule recombine_Chromosomes:
+rule recombineChromosomes:
     input:
         expand(tempFolder + '{chr}_Filter8.recode.vcf.gz', chr = chrs) # expand both chr and allele
     output:
