@@ -30,6 +30,7 @@ removeSamples = config['removeSamples']
 
 #Read in Chunking Metrics from config file
 NUM_CHUNK = config['NUM_CHUNK']
+print("%s chunks selected" % NUM_CHUNK)
 chunks = ['chunk'+str(x) for x in range(1,NUM_CHUNK+1)]
 chromosomeLengths = config['chromosomeLengths']
 
@@ -97,21 +98,31 @@ print("Found %s VCF files with chromosomes between 1 and 22" % len(vcfFiles) )
 # get out chrs
 chrs = [regex.search(vcf).group() for vcf in vcfFiles if regex.search(vcf) is not None] 
 
+# sort files by chr number 
+chr_n = [ int(i.split("chr")[1]) for i in chrs]
+chr_sorted = sorted(zip(chr_n,chrs, vcfFiles) )
+
+# get the sorted values back out
+vcfFiles = [i[2] for i in chr_sorted]
+chrs = [i[1] for i in chr_sorted]
+
 # create list of new output file names
 symlinkedFiles = [ inFolder + chr + "_input.vcf.gz" for chr in chrs ] 
 
-
 if splitFinalVCF:
-    final_output = expand(outFolder + '{chr}_{allele}_QCFinished.recode.vcf.gz', allele = alleles,  chr = chrs)
+    final_output = expand(outFolder + '{chr}_QCFinished.recode.vcf.gz', allele = alleles,  chr = chrs)
 else:
     print("don't split at the end")
-    final_output = expand(outFolder + 'chrAll_{allele}_QCFinished.recode.vcf.gz', allele = alleles)
+    final_output = expand(outFolder + 'chrAll_QCFinished.recode.vcf.gz', allele = alleles)
 
 
 rule all:
         input:
-            expand(outFolder + 'chrAll_{allele}_QCFinished.recode.vcf.gz', allele = alleles)
-            #final_output
+            #expand( inFolder + "{chr}_input.vcf.gz", chr = chrs)
+            #expand(tempFolder + '{chr}_filtered.vcf.gz', chr = chrs)
+            #expand(tempFolder + '{chr}_{chunk}_chunked.vcf.gz', chr = chrs, chunk = chunks)
+            #expand(outFolder + 'chrAll_QCFinished.recode.vcf.gz', allele = alleles)
+            final_output
 
 
 # for each file in the VCF file - symlink to input folder
@@ -136,12 +147,15 @@ rule filterRegionsAndSamples:
     output:
         blacklist_filtered = tempFolder + '{chr}_filtered.vcf.gz',
         stats = statsFolder + '{chr}_filtered_stats.txt'
+    params:
+        sample_filter_string = sample_filter_string
     shell:
         "ml vcftools/0.1.15;"
         "ml bcftools/1.9;"
-        "vcftools --gzvcf {input.vcfgz} {sample_filter_string} --exclude-positions {input.blacklist_file} --stdout --recode --recode-INFO-all | bgzip -c > {output.blacklist_filtered};"
+        "vcftools --gzvcf {input.vcfgz} {params.sample_filter_string} --exclude-positions {input.blacklist_file} --stdout --recode --recode-INFO-all | bgzip -c > {output.blacklist_filtered};"
         "bcftools stats {output.blacklist_filtered} > {output.stats};"
-        "tabix -f vcf {output.blacklist_filtered)"
+        "tabix -f vcf {output.blacklist_filtered}"
+
 
 # chunk number set by user
 # read in chrLengths
@@ -154,9 +168,8 @@ rule chunk:
         chunked = tempFolder + '{chr}_{chunk}_chunked.vcf.gz',
         stats_output = statsFolder + '{chr}_{chunk}_stats.txt'
     params:
-        chunkString = '', #empty string. Commands below fills this so that it may be fed to the shell command
-        tempFolder = tempFolder
-    message: "Creating chunk {wildcards.chunk} of {NUM_CHUNK} for {wildcards.chr}"
+        chunkString = ''
+    #message: "Creating chunk {wildcards.chunk} of {NUM_CHUNK} for {wildcards.chr}"
     run:
         import pandas as pd
         chromosome = wildcards.chr
@@ -171,12 +184,10 @@ rule chunk:
         end = int(chunkNum)*math.ceil(chrLen/NUM_CHUNK)
 
         #Uses tabix to split vcf file to extract only this chunks portion of the chromosome
-        chunkString = chromosome + ':' + str(start) + '-' + str(end)
+        params.chunkString = chromosome + ':' + str(start) + '-' + str(end)
 
-        shell("ml bcftools/1.9; \
-               tabix -p vcf -f {input.vcfgz}; \
-               tabix -h {input.vcfgz} {chunkString} | bgzip -c > {output.chunked}; \
-               bcftools stats {output.chunked} > {output.stats_output};")
+        shell("ml bcftools/1.9; tabix -p vcf -f {input.vcfgz}; tabix -h {input.vcfgz} {params.chunkString} | bgzip -c > {output.chunked}; bcftools stats {output.chunked} > {output.stats_output};")
+
 
 ## STEP 2 - PER-CHUNK FILTERS
 
@@ -185,8 +196,8 @@ rule Filter0_separateBiallelics:
     input:
         chunked = tempFolder + '{chr}_{chunk}_chunked.vcf.gz'
     output:
-        biallelic_Filter0 = tempFolder + '{chr}' + '_Biallelic_{chunk}_Filter0.recode.vcf.gz',
-        stats = statsFolder + '{chr}' + '_Biallelic_{chunk}_Filter0_stats.txt'
+        biallelic_Filter0 = tempFolder + '{chr}' + '_{chunk}_Biallelic.recode.vcf.gz',
+        stats = statsFolder + '{chr}' + '_{chunk}_Biallelic.stats.txt'
     group: "per_chunk_filter"
     shell:
         "ml vcftools/0.1.15;"
@@ -218,10 +229,10 @@ rule Filter0_separateBiallelics:
 #7) Keep sites that "PASS" by GATK
 rule Filter1_GATK_PASS:
     input:
-        Filter0 = tempFolder + '{chr}_{allele}_{chunk}_Filter0.recode.vcf.gz'
+        Filter0 = tempFolder + '{chr}_{chunk}_Biallelic.recode.vcf.gz'
     output:
-        Filter1 = tempFolder + '{chr}_{allele}_{chunk}_Filter1.recode.vcf.gz',
-        stats = statsFolder + '{chr}_{allele}_{chunk}_Filter1_stats.txt'
+        Filter1 = tempFolder + '{chr}_{chunk}_Filter1.recode.vcf.gz',
+        stats = statsFolder + '{chr}_{chunk}_Filter1_stats.txt'
     group: "per_chunk_filter"
     shell:
         "ml vcftools/0.1.15;"
@@ -233,10 +244,10 @@ rule Filter1_GATK_PASS:
 #8) Filter for genotype level depth (DP) (GDP)
 rule Filter2_GDP:
     input:
-        Filter1 = tempFolder + '{chr}_{allele}_{chunk}_Filter1.recode.vcf.gz'
+        Filter1 = tempFolder + '{chr}_{chunk}_Filter1.recode.vcf.gz'
     output:
-        Filter2 = tempFolder + '{chr}_{allele}_{chunk}_Filter2.recode.vcf.gz',
-        stats = statsFolder + '{chr}_{allele}_{chunk}_Filter2_stats.txt'
+        Filter2 = tempFolder + '{chr}_{chunk}_Filter2.recode.vcf.gz',
+        stats = statsFolder + '{chr}_{chunk}_Filter2_stats.txt'
     params:
         GDP_thresh = GDP
     group: "per_chunk_filter"
@@ -252,10 +263,10 @@ rule Filter2_GDP:
 #9) Filter for Genome Quality (GQ)
 rule Filter3_GQ:
     input:
-        Filter2 = tempFolder + '{chr}_{allele}_{chunk}_Filter2.recode.vcf.gz'
+        Filter2 = tempFolder + '{chr}_{chunk}_Filter2.recode.vcf.gz'
     output:
-        Filter3 = tempFolder + '{chr}_{allele}_{chunk}_Filter3.recode.vcf.gz',
-        stats = statsFolder + '{chr}_{allele}_{chunk}_Filter3_stats.txt'
+        Filter3 = tempFolder + '{chr}_{chunk}_Filter3.recode.vcf.gz',
+        stats = statsFolder + '{chr}_{chunk}_Filter3_stats.txt'
     params:
         GQ_thresh = GQ
     group: "per_chunk_filter"
@@ -268,10 +279,10 @@ rule Filter3_GQ:
 #10) Filter for SNP missingness
 rule Filter4_SNP_Missingess:
     input:
-        Filter3 = tempFolder + '{chr}_{allele}_{chunk}_Filter3.recode.vcf.gz'
+        Filter3 = tempFolder + '{chr}_{chunk}_Filter3.recode.vcf.gz'
     output:
-        Filter4 = tempFolder + '{chr}_{allele}_{chunk}_Filter4.recode.vcf.gz',
-        stats = statsFolder + '{chr}_{allele}_{chunk}_Filter4_stats.txt'
+        Filter4 = tempFolder + '{chr}_{chunk}_Filter4.recode.vcf.gz',
+        stats = statsFolder + '{chr}_{chunk}_Filter4_stats.txt'
     params:
         MISS_THRESH_SNP = MISS_THRESH_SNP
     group: "per_chunk_filter" 
@@ -283,10 +294,10 @@ rule Filter4_SNP_Missingess:
 #11) Filter for Overall Read Depth (DP) (ODP)
 rule Filter5_ODP:
     input:
-        Filter4 = tempFolder + '{chr}_{allele}_{chunk}_Filter4.recode.vcf.gz'
+        Filter4 = tempFolder + '{chr}_{chunk}_Filter4.recode.vcf.gz'
     output:
-        Filter5 = tempFolder + '{chr}_{allele}_{chunk}_Filter5.recode.vcf.gz',
-        stats = statsFolder + '{chr}_{allele}_{chunk}_Filter5_stats.txt'
+        Filter5 = tempFolder + '{chr}_{chunk}_Filter5.recode.vcf.gz',
+        stats = statsFolder + '{chr}_{chunk}_Filter5_stats.txt'
     params:
         ODP_thresh = ODP
     group: "per_chunk_filter"
@@ -299,10 +310,10 @@ rule Filter5_ODP:
 #12) Filter for Mapping Quality (MQ)
 rule Filter6_MQ:
     input:
-        Filter5 = tempFolder + '{chr}_{allele}_{chunk}_Filter5.recode.vcf.gz'
+        Filter5 = tempFolder + '{chr}_{chunk}_Filter5.recode.vcf.gz'
     output:
-        Filter6 = tempFolder + '{chr}_{allele}_{chunk}_Filter6.recode.vcf.gz',
-        stats = statsFolder + '{chr}_{allele}_{chunk}_Filter6_stats.txt'
+        Filter6 = tempFolder + '{chr}_{chunk}_Filter6.recode.vcf.gz',
+        stats = statsFolder + '{chr}_{chunk}_Filter6_stats.txt'
     params:
         MQ_MAX_THRESH = MQ_MAX,
         MQ_MIN_THRESH = MQ_MIN
@@ -316,12 +327,12 @@ rule Filter6_MQ:
 #13) Separate out Indel files and SNP files in Biallelic files.
 rule Biallelic_Separate_Indels_and_SNPs:
     input:
-        Filter6 = tempFolder + '{chr}_Biallelic_{chunk}_Filter6.recode.vcf.gz'
+        Filter6 = tempFolder + '{chr}_{chunk}_Filter6.recode.vcf.gz'
     output:
-        Filter6_SNPs = tempFolder + '{chr}_Biallelic_{chunk}_Filter6_SNPs.recode.vcf.gz',
-        Filter6_SNPs_stats = statsFolder + '{chr}_Biallelic_{chunk}_Filter6_SNPs_stats.txt',
-        Filter6_Indels = tempFolder + '{chr}_Biallelic_{chunk}_Filter6_Indels.recode.vcf.gz',
-        Filter6_Indels_stats = statsFolder + '{chr}_Biallelic_{chunk}_Filter6_Indels_stats.txt'
+        Filter6_SNPs = tempFolder + '{chr}_{chunk}_Filter6_SNPs.recode.vcf.gz',
+        Filter6_SNPs_stats = statsFolder + '{chr}_{chunk}_Filter6_SNPs_stats.txt',
+        Filter6_Indels = tempFolder + '{chr}_{chunk}_Filter6_Indels.recode.vcf.gz',
+        Filter6_Indels_stats = statsFolder + '{chr}_{chunk}_Filter6_Indels_stats.txt'
     group: "per_chunk_filter"
     shell:
         "ml vcftools/0.1.15; module load bcftools/1.9;"
@@ -336,10 +347,10 @@ rule Biallelic_Separate_Indels_and_SNPs:
 #14) Filter Biallelic SNPs for VQSLOD
 rule Biallelic_SNPs_Filter7_VQSLOD:
     input:
-        Filter6_SNPs = tempFolder + '{chr}_Biallelic_{chunk}_Filter6_SNPs.recode.vcf.gz'
+        Filter6_SNPs = tempFolder + '{chr}_{chunk}_Filter6_SNPs.recode.vcf.gz'
     output:
-        Filter7_SNPs = tempFolder + '{chr}_Biallelic_{chunk}_Filter7_SNPs.recode.vcf.gz',
-        stats = statsFolder + '{chr}_Biallelic_{chunk}_Filter7_SNPs_stats.txt'
+        Filter7_SNPs = tempFolder + '{chr}_{chunk}_Filter7_SNPs.recode.vcf.gz',
+        stats = statsFolder + '{chr}_{chunk}_Filter7_SNPs_stats.txt'
     params:
         VQSLOD_thresh = VQSLOD
     group: "per_chunk_filter"
@@ -352,11 +363,11 @@ rule Biallelic_SNPs_Filter7_VQSLOD:
 #15) Combine Biallelic Indels and SNPs
 rule Biallelic_Combine_Indels_and_SNPs:
     input:
-        Filter7_SNPs = tempFolder + '{chr}_Biallelic_{chunk}_Filter7_SNPs.recode.vcf.gz',
-        Filter6_Indels = tempFolder + '{chr}_Biallelic_{chunk}_Filter6_Indels.recode.vcf.gz'
+        Filter7_SNPs = tempFolder + '{chr}_{chunk}_Filter7_SNPs.recode.vcf.gz',
+        Filter6_Indels = tempFolder + '{chr}_{chunk}_Filter6_Indels.recode.vcf.gz'
     output:
-        Filter7 = tempFolder + '{chr}_Biallelic_{chunk}_Filter7.recode.vcf.gz',
-        stats = statsFolder + '{chr}_Biallelic_{chunk}_Filter7_stats.txt'
+        Filter7 = tempFolder + '{chr}_{chunk}_Filter7.recode.vcf.gz',
+        stats = statsFolder + '{chr}_{chunk}_Filter7_stats.txt'
     group: "per_chunk_filter"
     shell:
         "ml bcftools/1.9;"
@@ -366,10 +377,10 @@ rule Biallelic_Combine_Indels_and_SNPs:
 #16) Filter via Inbreeding_Coef
 rule Filter8_Inbreeding_Coef:
     input:
-        Filter7 = tempFolder + '{chr}_{allele}_{chunk}_Filter7.recode.vcf.gz'
+        Filter7 = tempFolder + '{chr}_{chunk}_Filter7.recode.vcf.gz'
     output:
-        Filter8 = tempFolder + '{chr}_{allele}_{chunk}_Filter8.recode.vcf.gz',
-        stats = statsFolder + '{chr}_{allele}_{chunk}_Filter8_stats.txt'
+        Filter8 = tempFolder + '{chr}_{chunk}_Filter8.recode.vcf.gz',
+        stats = statsFolder + '{chr}_{chunk}_Filter8_stats.txt'
     params:
         INBREEDING_COEF = INBREEDING_COEF
     group: "per_chunk_filter"
@@ -393,55 +404,52 @@ rule Filter8_Inbreeding_Coef:
 rule recombineChunks:
     input:
         #expand("{sample}_{id}.txt", id=["1", "2"], allow_missing=True)
-        expand(tempFolder +  "{chr}_{allele}_{chunk}_Filter8.recode.vcf.gz", chunk = chunks, allele = alleles, allow_missing=True) # expand only chunk and allele, not chr
+        expand(tempFolder +  "{chr}_{chunk}_Filter8.recode.vcf.gz", chunk = chunks, allow_missing=True) # expand only chunk and allele, not chr
+    wildcard_constraints:
+        chunk="chunk[0-9]+",
+        chr="chr[0-9]+"
     output:
-        tempFolder + '{chr}_{allele}_Filter8.recode.vcf.gz'
+        tempFolder + '{chr}_Filter8.recode.vcf.gz'
     shell:
         "vcf-concat {input} | bgzip -c > {output}"
 
 rule recombine_Chromosomes:
     input:
-        expand(tempFolder + '{chr}_{allele}_Filter8.recode.vcf.gz', allele = alleles, chr = chrs) # expand both chr and allele
+        expand(tempFolder + '{chr}_Filter8.recode.vcf.gz', chr = chrs) # expand both chr and allele
     output:
-        recombined = tempFolder + 'all_{allele}_Filter8.recode.vcf.gz',
-        stats = statsFolder + 'all_{allele}_Filter8_stats.txt'
-    params:
-        concat_string = '',
-    run:
-        # pretty sure you can just use the expand() string here
-        #i#for i in input.separate:
-        #   params.concat_string = params.concat_string+str(i)+' '
-
-        shell("ml vcftools/0.1.15; module load bcftools/1.9;vcf-concat {input} | bgzip > {output.recombined};")
-        shell("ml bcftools/1.9; bcftools stats {output.recombined} > {output.stats};")
+        recombined = tempFolder + 'chrAll_Filter8.recode.vcf.gz',
+        stats = statsFolder + 'chrAll_Filter8_stats.txt'
+    shell:
+        "vcf-concat {input} | bgzip > {output.recombined};"
+        "bcftools stats {output.recombined} > {output.stats};"
 
 # leave out sorting for now 
-rule sort:
-    # crazy memory intensive to do this - must be better way
-    input:
-        Filter8 = tempFolder + 'chrAll_{allele}_Filter8.recode.vcf.gz'
-    output:
-        Filter8_sort = tempFolder + 'chrAll_{allele}_Filter8_sorted.recode.vcf.gz',
-        stats = statsFolder + 'chrAll_{allele}_Filter8_sorted_stats.txt'
-    params:
-        memory = sort_mem
-    shell:
-        "ml bcftools/1.9;"
-        "bcftools sort {input.Filter8} -Oz -m {params.memory} > {output.Filter8_sort};"
-        "bcftools stats {output.Filter8_sort} > {output.stats};"
+#rule sort:
+#    # crazy memory intensive to do this - must be better way
+#    input:
+#        Filter8 = tempFolder + 'chrAll_Filter8.recode.vcf.gz'
+#    output:
+#        Filter8_sort = tempFolder + 'chrAll_Filter8_sorted.recode.vcf.gz',
+#        stats = statsFolder + 'chrAll_Filter8_sorted_stats.txt'
+#    params:
+#        memory = sort_mem
+#    shell:
+#        "ml bcftools/1.9;"
+#        "bcftools sort {input.Filter8} -Oz -m {params.memory} > {output.Filter8_sort};"
+#        "bcftools stats {output.Filter8_sort} > {output.stats};"
 
 #18) Filter via Sample level Missingness
 rule Filter9_Sample_Missingness:
     input:
-        Filter8 = tempFolder + 'chrAll_{allele}_Filter8.recode.vcf.gz' 
-        #Filter8 = tempFolder + 'chrAll_{allele}_Filter8_sorted.recode.vcf.gz'
+        Filter8 = tempFolder + 'chrAll_Filter8.recode.vcf.gz' 
+        #Filter8 = tempFolder + 'all_Filter8_sorted.recode.vcf.gz'
     output:
-        Filter9 = tempFolder + 'chrAll_{allele}_Filter9.recode.vcf.gz',
-        stats = statsFolder + 'chrAll_{allele}_Filter9_stats.txt'
+        Filter9 = tempFolder + 'chrAll_Filter9.recode.vcf.gz',
+        stats = statsFolder + 'chrAll_Filter9_stats.txt'
     params:
         MISS_THRESH_INDI = MISS_THRESH_INDI,
-        missingness_name = tempFolder + 'chrAll_{allele}_Filter8',
-        missingness_filtered = tempFolder + 'chrAll_{allele}_Filter8_imiss_filtered.txt'
+        missingness_name = tempFolder + 'chrAll_Filter8',
+        missingness_filtered = tempFolder + 'chrAll_Filter8_imiss_filtered.txt'
     shell:
         "ml vcftools/0.1.15; module load bcftools/1.9;module load R/3.5.3;"
 
@@ -459,14 +467,14 @@ rule Filter9_Sample_Missingness:
 #19) Filter via Relatedness
 rule Filter10_Relatedness:
     input:
-        Filter9 = tempFolder + 'chrAll_{allele}_Filter9.recode.vcf.gz'
+        Filter9 = tempFolder + 'chrAll_Filter9.recode.vcf.gz'
     output:
-        Final = outFolder + 'chrAll_{allele}_QCFinished.recode.vcf.gz',
-        stats = statsFolder + 'chrAll_{allele}_QCFinished_stats.txt'
+        Final = outFolder + 'chrAll_QCFinished.recode.vcf.gz',
+        stats = statsFolder + 'chrAll_QCFinished_stats.txt'
     params:
         RELATEDNESS_THRESH = RELATEDNESS_THRESH,
-        relatedness_name = tempFolder + 'chrAll_{allele}_Filter9',
-        relatedness_filtered = tempFolder + 'chrAll_{allele}_Filter9_relatedness2_filtered.txt'
+        relatedness_name = tempFolder + 'chrAll_Filter9',
+        relatedness_filtered = tempFolder + 'chrAll_Filter9_relatedness2_filtered.txt'
     shell:
         "ml vcftools/0.1.15; module load bcftools/1.9;module load R/3.5.3;"
 
@@ -484,9 +492,9 @@ rule Filter10_Relatedness:
 #20) Splits the chromosomes again if specified in config.
 #rule Split_ChrAll:
 #    input:
-#        Final = outFolder + 'chrAll_{allele}_QCFinished.recode.vcf.gz'
+#        Final = outFolder + 'chrAll_QCFinished.recode.vcf.gz'
 #    output:
-#        Final_split = outFolder + '{chr}_{allele}_QCFinished.recode.vcf.gz'
+#        Final_split = outFolder + '{chr}_QCFinished.recode.vcf.gz'
 #    params:
 #        outFolder = outFolder
 #    run:
