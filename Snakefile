@@ -6,7 +6,9 @@ sort_mem = '40G'
 
 #snakemake pipeline for QC of vcf files. Created first on 191115.
 # Sanan Venkatesh and Jack Humphrey
-
+print( " * WGS QC PIPELINE * ")
+print( " authors: Jack Humphrey and Sanan Venkatesh")
+print( " inspired by Adelson et al, 2019")
 
 #1) Set up Variables from Config files
 # should be set to some default conda environment that contains snakemake
@@ -26,11 +28,10 @@ splitFinalVCF = config['splitFinalVCF']
 filterBlacklist = config['filterBlacklist']
 blacklistFile = config['blacklistFile']
 removeSamples = config['removeSamples']
-
+liftOverhg19hg38 = config['liftOverhg19hg38']
 
 #Read in Chunking Metrics from config file
 NUM_CHUNK = config['NUM_CHUNK']
-print("%s chunks selected" % NUM_CHUNK)
 chunks = ['chunk'+str(x) for x in range(1,NUM_CHUNK+1)]
 chromosomeLengths = config['chromosomeLengths']
 
@@ -88,12 +89,15 @@ vcfFiles = [line.rstrip('\n') for line in open(vcf_file_list)]
 # remove entries that don't end with ".vcf.gz"
 vcfFiles = [ v for v in vcfFiles if v.endswith(".vcf.gz")]
 
-print("Found %s gzipped VCF files" % len(vcfFiles) )
+print(" * Found %s gzipped VCF files" % len(vcfFiles) )
 
 # remove entries that don't have chr names
 vcfFiles = [ v for v in vcfFiles if regex.search(v) is not None ]
 
-print("Found %s VCF files with chromosomes between 1 and 22" % len(vcfFiles) )
+print(" * Found %s VCF files with chromosomes between 1 and 22" % len(vcfFiles) )
+
+print(" * Chunking: %s chunks selected" % NUM_CHUNK)
+
 
 # get out chrs
 chrs = [regex.search(vcf).group() for vcf in vcfFiles if regex.search(vcf) is not None] 
@@ -112,7 +116,7 @@ symlinkedFiles = [ inFolder + chr + "_input.vcf.gz" for chr in chrs ]
 if splitFinalVCF:
     final_output = expand(outFolder + '{chr}_QCFinished.recode.vcf.gz', allele = alleles,  chr = chrs)
 else:
-    print("don't split at the end")
+    print(" * Output options: don't split by chromosome at the end")
     final_output = expand(outFolder + 'chrAll_QCFinished.recode.vcf.gz', allele = alleles)
 
 MAF_threshold = str(config["MAF_threshold"])
@@ -126,7 +130,6 @@ rule all:
             final_output,
             outFolder + 'chrAll_QCFinished.MAF_' + MAF_threshold + ".vcf.gz"
 
-
 # for each file in the VCF file - symlink to input folder
 rule symlinkVCFs:
     output:
@@ -136,7 +139,33 @@ rule symlinkVCFs:
         for i in range(len(vcfFiles)):
             os.symlink(os.path.abspath(vcfFiles[i]), symlinkedFiles[i], target_is_directory = False, dir_fd = None)
 
+if liftOverhg19hg38 is True:
+    print(" * VCF files will be lifted over from hg19 to hg38")
+    filterRegionsSamplesInput = inFolder + "{chr}_hg38.vcf.gz"
+else:
+    filterRegionsSamplesInput = inFolder + "{chr}_input.vcf.gz"
+
+# if VCFs are called with hg19
+# lift over to hg38
+rule liftOverVCFs:
+    input:
+        vcf = inFolder + "{chr}_input.vcf.gz", 
+        genome =  "data/hg38.fa"
+    output:
+        vcfgz = inFolder + "{chr}_hg38.vcf.gz"
+    params:
+        vcf =  inFolder + "{chr}_hg38.vcf",
+        chain = "data/hg19ToHg38.over.chain.gz"
+    shell:
+        "ml crossmap/0.3.2; ml bcftools/1.9;"
+        "CrossMap.py vcf {params.chain} {input.vcf} {input.genome} {params.vcf} ;"
+        "bgzip {params.vcf} ;"
+        "tabix {output.vcfgz}"
+
+
+
 if removeSamples is not False:
+    print(" * Removing samples from file %s " % removeSamples)
     sample_filter_string = "--remove " + removeSamples
 else:
     sample_filter_string = ""
@@ -144,7 +173,7 @@ else:
 # Filter SNPs based on Blacklist, Samples based on removeSamples list
 rule filterRegionsAndSamples:
     input:
-        vcfgz = inFolder + "{chr}_input.vcf.gz",
+        vcfgz = filterRegionsSamplesInput,
         blacklist_file = blacklistFile
     output:
         blacklist_filtered = tempFolder + '{chr}_filtered.vcf.gz',
@@ -155,7 +184,7 @@ rule filterRegionsAndSamples:
         "ml vcftools/0.1.15;"
         "ml bcftools/1.9;"
         "vcftools --gzvcf {input.vcfgz} {params.sample_filter_string} --exclude-positions {input.blacklist_file} --stdout --recode --recode-INFO-all | bgzip -c > {output.blacklist_filtered};"
-        "tabix {output.blacklist_filtered};"
+        "tabix -f  {output.blacklist_filtered};"
         "bcftools stats {output.blacklist_filtered} > {output.stats};"
 
 
@@ -185,10 +214,10 @@ rule chunk:
         start = (int(chunkNum)-1)*math.ceil(chrLen/NUM_CHUNK)+1
         end = int(chunkNum)*math.ceil(chrLen/NUM_CHUNK)
 
-        #Uses tabix to split vcf file to extract only this chunks portion of the chromosome
+        #Uses tabix -f  to split vcf file to extract only this chunks portion of the chromosome
         params.chunkString = chromosome + ':' + str(start) + '-' + str(end)
 
-        shell("ml bcftools/1.9; tabix -h {input.vcfgz} {params.chunkString} | bgzip -c > {output.chunked}; bcftools stats {output.chunked} > {output.stats_output};")
+        shell("ml bcftools/1.9; tabix -f  -h {input.vcfgz} {params.chunkString} | bgzip -c > {output.chunked}; bcftools stats {output.chunked} > {output.stats_output};")
 
 
 ## STEP 2 - PER-CHUNK FILTERS
@@ -218,7 +247,7 @@ rule Filter0_separateBiallelics:
 #     params:
 #         unsplit_file = tempFolder + '{chr}' + '_Triallelic_unsplit.recode.vcf.gz'
 #     shell:
-#         "ml vcftools/0.1.15; module load bcftools/1.9;"
+#         "ml vcftools/0.1.15; ml bcftools/1.9;"
 #
 #         #this would be where I say "--max-alleles 3" if we only want to keep triallelics
 #         "vcftools --gzvcf {input.vcfgz} --min-alleles 3 --recode --recode-INFO-all --stdout | bgzip -c > {params.unsplit_file};"
@@ -254,10 +283,10 @@ rule Filter2_GDP:
         GDP_thresh = GDP
     #group: "per_chunk_filter"
     shell:
-        "ml vcflib/v1.0.0-rc0; module load bcftools/1.9;"
+        "ml vcflib/v1.0.0-rc0; ml bcftools/1.9;"
 
-        #tabix must be created in this step and not step before because of how snakemake temporally creates files. Because tabix does not have an "output", it would be created before the output from the previous rule if placed within the rule.
-        "tabix -p vcf {input.Filter1};"
+        #tabix -f  must be created in this step and not step before because of how snakemake temporally creates files. Because tabix does not have an "output", it would be created before the output from the previous rule if placed within the rule.
+        "tabix -f  -p vcf {input.Filter1};"
         "vcffilter -g \"DP > {params.GDP_thresh}\" {input.Filter1} | bgzip -c > {output.Filter2};"
         "bcftools stats {output.Filter2} > {output.stats};"
 
@@ -273,8 +302,8 @@ rule Filter3_GQ:
         GQ_thresh = GQ
     #group: "per_chunk_filter"
     shell:
-        "ml vcflib/v1.0.0-rc0; module load bcftools/1.9;"
-        "tabix -p vcf {input.Filter2};"
+        "ml vcflib/v1.0.0-rc0; ml bcftools/1.9;"
+        "tabix -f  -p vcf {input.Filter2};"
         "vcffilter -g \"GQ > {params.GQ_thresh}\" {input.Filter2} | bgzip -c > {output.Filter3};"
         "bcftools stats {output.Filter3} > {output.stats};"
 
@@ -289,7 +318,7 @@ rule Filter4_SNP_Missingess:
         MISS_THRESH_SNP = MISS_THRESH_SNP
     #group: "per_chunk_filter" 
     shell:
-        "ml vcftools/0.1.15; module load bcftools/1.9;"
+        "ml vcftools/0.1.15; ml bcftools/1.9;"
         "vcftools --gzvcf {input.Filter3} --max-missing {params.MISS_THRESH_SNP} --stdout --recode --recode-INFO-all | bgzip -c > {output.Filter4};"
         "bcftools stats {output.Filter4} > {output.stats};"
 
@@ -304,8 +333,8 @@ rule Filter5_ODP:
         ODP_thresh = ODP
     #group: "per_chunk_filter"
     shell:
-        "ml vcflib/v1.0.0-rc0; module load bcftools/1.9;"
-        "tabix -p vcf {input.Filter4};"
+        "ml vcflib/v1.0.0-rc0; ml bcftools/1.9;"
+        "tabix -f  -p vcf {input.Filter4};"
         "vcffilter -f \"DP > {params.ODP_thresh}\" {input.Filter4} | bgzip -c > {output.Filter5};"
         "bcftools stats {output.Filter5} > {output.stats};"
 
@@ -321,8 +350,8 @@ rule Filter6_MQ:
         MQ_MIN_THRESH = MQ_MIN
     #group: "per_chunk_filter"
     shell:
-        "ml vcflib/v1.0.0-rc0; module load bcftools/1.9;"
-        "tabix -p vcf {input.Filter5};"
+        "ml vcflib/v1.0.0-rc0; ml bcftools/1.9;"
+        "tabix -f  -p vcf {input.Filter5};"
         "vcffilter -f \"MQ > {params.MQ_MIN_THRESH} & MQ < {params.MQ_MAX_THRESH}\" {input.Filter5} | bgzip -c > {output.Filter6};"
         "bcftools stats {output.Filter6} > {output.stats};"
 
@@ -337,7 +366,7 @@ rule Biallelic_Separate_Indels_and_SNPs:
         Filter6_Indels_stats = statsFolder + '{chr}_{chunk}_Filter6_Indels_stats.txt'
     #group: "per_chunk_filter"
     shell:
-        "ml vcftools/0.1.15; module load bcftools/1.9;"
+        "ml vcftools/0.1.15; ml bcftools/1.9;"
 
         "vcftools --gzvcf {input.Filter6} --remove-indels --stdout --recode --recode-INFO-all | bgzip -c > {output.Filter6_SNPs};"
         "vcftools --gzvcf {input.Filter6} --keep-only-indels --stdout --recode --recode-INFO-all | bgzip -c > {output.Filter6_Indels};"
@@ -357,8 +386,8 @@ rule Biallelic_SNPs_Filter7_VQSLOD:
         VQSLOD_thresh = VQSLOD
     #group: "per_chunk_filter"
     shell:
-        "ml vcflib/v1.0.0-rc0; module load bcftools/1.9;"
-        "tabix -p vcf {input.Filter6_SNPs};"
+        "ml vcflib/v1.0.0-rc0; ml bcftools/1.9;"
+        "tabix -f -p vcf {input.Filter6_SNPs};"
         "vcffilter -f \"VQSLOD > {params.VQSLOD_thresh}\" {input.Filter6_SNPs} | bgzip -c > {output.Filter7_SNPs};"
         "bcftools stats {output.Filter7_SNPs} > {output.stats};"
 
@@ -387,14 +416,14 @@ rule Filter8_Inbreeding_Coef:
         INBREEDING_COEF = INBREEDING_COEF
     #group: "per_chunk_filter"
     run:
-        shell("ml vcflib/v1.0.0-rc0; module load bcftools/1.9;tabix -p vcf {input.Filter7};")
+        shell("ml vcflib/v1.0.0-rc0; ml bcftools/1.9;tabix -f -p vcf {input.Filter7};")
 
         #Negative values for inbreeding coeficient are expressed as (0 - [value]) due to how vcffilter is built. Hence, an if statement to separate negative from positive input INBREEDING_COEF values
         if params.INBREEDING_COEF >= 0:
-            shell("ml vcflib/v1.0.0-rc0; module load bcftools/1.9;vcffilter -f \"InbreedingCoeff > {params.INBREEDING_COEF}\" {input.Filter7} |bgzip -c > {output.Filter8};")
+            shell("ml vcflib/v1.0.0-rc0; ml bcftools/1.9;vcffilter -f \"InbreedingCoeff > {params.INBREEDING_COEF}\" {input.Filter7} |bgzip -c > {output.Filter8};")
         else:
             params.INBREEDING_COEF = -params.INBREEDING_COEF
-            shell("ml vcflib/v1.0.0-rc0; module load bcftools/1.9;vcffilter -f \"InbreedingCoeff > ( 0 - {params.INBREEDING_COEF} )\" {input.Filter7} |bgzip -c > {output.Filter8};")
+            shell("ml vcflib/v1.0.0-rc0; ml bcftools/1.9;vcffilter -f \"InbreedingCoeff > ( 0 - {params.INBREEDING_COEF} )\" {input.Filter7} |bgzip -c > {output.Filter8};")
 
         shell("ml bcftools/1.9;bcftools stats {output.Filter8} > {output.stats};")
 
@@ -413,7 +442,7 @@ rule recombineChunks:
     output:
         tempFolder + '{chr}_Filter8.recode.vcf.gz'
     shell:
-        "ml vcftools/0.1.15;ml vcflib/v1.0.0-rc0; module load bcftools/1.9;"
+        "ml vcftools/0.1.15;ml vcflib/v1.0.0-rc0; ml bcftools/1.9;"
         "vcf-concat {input} | bgzip -c > {output}"
 
 rule recombineChromosomes:
@@ -423,7 +452,7 @@ rule recombineChromosomes:
         recombined = tempFolder + 'chrAll_Filter8.recode.vcf.gz',
         stats = statsFolder + 'chrAll_Filter8_stats.txt'
     shell:
-        "ml vcftools/0.1.15;ml vcflib/v1.0.0-rc0; module load bcftools/1.9;"
+        "ml vcftools/0.1.15;ml vcflib/v1.0.0-rc0; ml bcftools/1.9;"
         "vcf-concat {input} | bgzip > {output.recombined};"
         "bcftools stats {output.recombined} > {output.stats};"
 
@@ -456,17 +485,16 @@ rule Filter9_Sample_Missingness:
         missingness_filtered = tempFolder + 'chrAll_Filter8_imiss_filtered.txt'
     shell:
         "ml vcftools/0.1.15; ml bcftools/1.9;ml R/3.6.0;"
-
         #create sample missingness file
-        "vcftools --gzvcf {input.Filter8} --missing-indv --out {params.missingness_name};"
+        "/hpc/packages/minerva-common/vcftools/0.1.15/bin/vcftools --gzvcf {input.Filter8} --missing-indv --out {params.missingness_name};"
 
         #filter the sample missingness file for significance
-        "Rscript scripts/filterMissingnessIndividualFile.R {params.missingness_name}.imiss {params.MISS_THRESH_INDI} {params.missingness_filtered};"
+        "/hpc/packages/minerva-centos7/R/3.6.0/lib64/R/bin/Rscript scripts/filterMissingnessIndividualFile.R {params.missingness_name}.imiss {params.MISS_THRESH_INDI} {params.missingness_filtered};"
 
         #filter the samples with significant missingness out of vcf
-        "vcftools --gzvcf {input.Filter8} --remove {params.missingness_filtered} --stdout --recode --recode-INFO-all | bgzip -c > {output.Filter9};"
+        "/hpc/packages/minerva-common/vcftools/0.1.15/bin/vcftools --gzvcf {input.Filter8} --remove {params.missingness_filtered} --stdout --recode --recode-INFO-all | bgzip -c > {output.Filter9};"
 
-        "bcftools stats {output.Filter9} > {output.stats};"
+        "/hpc/packages/minerva-centos7/bcftools/1.9/bin/bcftools stats {output.Filter9} > {output.stats};"
 
 #19) Filter via Relatedness
 rule Filter10_Relatedness:
@@ -490,7 +518,7 @@ rule Filter10_Relatedness:
 
         ##filter the samples with significant relatedness out of vcf. The RScript optimizes number of samples retained. More details about algorithm inside Rscript
         "vcftools --gzvcf {input.Filter9} --remove {params.relatedness_filtered} --stdout --recode --recode-INFO-all | bgzip -c > {output.Final};"
-        "tabix {output.Final} "
+        "tabix -f {output.Final}; "
         "bcftools stats {output.Final} > {output.stats};"
 
 # Filter on Minor Allele Frequency (MAF)
@@ -502,7 +530,7 @@ rule filterMAF:
     shell:
         "ml vcftools/0.1.15; ml bcftools/1.9;"
         "vcftools --gzvcf {input} --maf {MAF_threshold} --stdout --recode --recode-INFO-all | bgzip -c > {output};"
-        "tabix {output}"
+        "tabix -f {output}"
  
 #20) Splits the chromosomes again if specified in config.
 #rule Split_ChrAll:
@@ -514,4 +542,4 @@ rule filterMAF:
 #        outFolder = outFolder
 #    run:
 #        shell() # below creates a cyclic dependency - presumably due to using wildcards.chr
-        #shell("ml bcftools/1.9;tabix -p vcf {input.Final};tabix {input.Final} {wildcards.chr} > {output.Final_split};")
+        #shell("ml bcftools/1.9;tabix -f  -p vcf {input.Final};tabix {input.Final} {wildcards.chr} > {output.Final_split};")

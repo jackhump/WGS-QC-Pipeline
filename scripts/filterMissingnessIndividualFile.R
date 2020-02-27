@@ -1,6 +1,4 @@
 #1) Load in Packages, take in command line arguments
-#Packages
-library(readr)
 
 #Load in command line arguments
 args <- commandArgs(trailingOnly = T)
@@ -28,19 +26,8 @@ if (length(args) > 2) {
 }
 
 #read in file specified by input. Both input and output include paths to their files from the folder where the snakefile is
-missingnessINDI <- read_delim(input, "\t", escape_double = FALSE, trim_ws = TRUE)
+missingnessINDI <- read.table(input, header=TRUE, sep = "\t", stringsAsFactors=FALSE)
 
-#3) filter missingness file
+missing_samples <- missingnessINDI[ missingnessINDI$F_MISS > threshold, "INDV"]
 
-#create empty vector that will get the values of significant missingness chromosomes.
-indi <- c()
-
-#Filters missingness file based on threshold, and fills the two vectors from above
-for (i in 1:nrow(missingnessINDI)) {
-  if (missingnessINDI[i,5][[1]] > threshold) {
-    indi <- c(indi,missingnessINDI[i,1][[1]])
-  }
-}
-
-#4) Write final output
-write.table(indi, file = output, quote = F, col.names = F, row.names = F, sep = "\t")
+writeLines(missing_samples, con = output)

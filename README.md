@@ -24,6 +24,21 @@ In our experience, MQ and VQSLOD do not change between datasets but DP does as i
 So 300 samples at 30x coverage should have a median DP of around 9000.
  
 
+# Inputs
+
+A set of jointly called VCFs, split by chromosome. Each file must have "chr1","chr2", etc in the file name.
+
+vcfFileList should be a text file containing the full paths to each file. 
+
+Variants must have been called using GATK. Check whether your data has VQSLOD, DP, MQ and InbreedingCoef fields!
+
+
+# Lifting over to hg19
+
+
+This requires the human genome fasta file hg38.fa to be present in `data/`. Symlink this from wherever you keep a copy.
+
+In the config, set liftOver to True - default is False.
 
 # Parallel execution on MSSM HPC
 

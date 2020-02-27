@@ -1,6 +1,5 @@
 #1) Load in Packages, take in command line arguments
 #Packages
-library(readr)
 
 #Load in command line arguments
 args <- commandArgs(trailingOnly = T)
@@ -28,7 +27,8 @@ if (length(args) > 2) {
 }
 
 #read in file specified by input. Both input and output include paths to their files from the folder where the snakefile is
-relatedness <- read_delim(input, "\t", escape_double = FALSE, trim_ws = TRUE)
+
+relatedness <- read.table(input, sep = "\t", header=TRUE, stringsAsFactors = FALSE)
 
 #3) Find unique combinations of Relatedness that pass the threshold
 
