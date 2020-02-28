@@ -8,12 +8,12 @@ splitFinalVCF: False #If true, splits the final vcf on chromosome and writes the
 filterBlacklist: True #if true, filters based on a provided blacklist file. Blast list must be put in input folder and be in bed format
 blacklistFile: "data/hg38-blacklist.v2.bed.gz" # from https://github.com/Boyle-Lab/Blacklist/blob/master/lists/hg38-blacklist.v2.bed.gz; ref: https://www.nature.com/articles/s41598-019-45839-z
 MAF_threshold: 0.01
-
-removeSamples: "data/2020_02_25_non_european_vcf_ids.txt"
+liftOverhg19hg38: False
+removeSamples: "data/2020_02_28_non_european_and_sex_fails_vcf_ids.txt"
 
 vcfFileList: "NYGC_Freeze02_European_Feb2020/NYGC_Freeze_02_recalibrated_variants.vcf_list.txt"
 #Chunking Metric
-NUM_CHUNK: 10
+NUM_CHUNK: 4
 #how much to break up each chromosome. Higher values will run faster but reserve more nodes
 chromosomeLengths: "data/hg38_chrSizes.txt"
 

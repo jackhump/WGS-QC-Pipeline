@@ -141,7 +141,7 @@ rule symlinkVCFs:
 
 if liftOverhg19hg38 is True:
     print(" * VCF files will be lifted over from hg19 to hg38")
-    filterRegionsSamplesInput = inFolder + "{chr}_hg38.vcf.gz"
+    filterRegionsSamplesInput = inFolder + "{chr}_hg38_sorted.vcf.gz"
 else:
     filterRegionsSamplesInput = inFolder + "{chr}_input.vcf.gz"
 
@@ -152,15 +152,19 @@ rule liftOverVCFs:
         vcf = inFolder + "{chr}_input.vcf.gz", 
         genome =  "data/hg38.fa"
     output:
-        vcfgz = inFolder + "{chr}_hg38.vcf.gz"
+        vcfgz_sorted = inFolder + "{chr}_hg38_sorted.vcf.gz"
     params:
+        vcfgz = inFolder + "{chr}_hg38.vcf.gz",
+        memory = "12G",
         vcf =  inFolder + "{chr}_hg38.vcf",
         chain = "data/hg19ToHg38.over.chain.gz"
     shell:
         "ml crossmap/0.3.2; ml bcftools/1.9;"
         "CrossMap.py vcf {params.chain} {input.vcf} {input.genome} {params.vcf} ;"
         "bgzip {params.vcf} ;"
-        "tabix {output.vcfgz}"
+        "bcftools sort {params.vcfgz} -Oz -m {params.memory} > {output.vcfgz_sorted};"
+        "tabix {output.vcfgz_sorted};"
+        "rm {params.vcfgz}"
 
 
 
@@ -221,7 +225,7 @@ rule chunk:
 
 
 ## STEP 2 - PER-CHUNK FILTERS
-
+   
 #6) Separate biallelics and triallelics for later on
 rule Filter0_separateBiallelics:
     input:
