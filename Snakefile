@@ -356,7 +356,9 @@ rule Filter6_MQ:
     shell:
         "ml vcflib/v1.0.0-rc0; ml bcftools/1.9;"
         "tabix -f  -p vcf {input.Filter5};"
-        "vcffilter -f \"MQ > {params.MQ_MIN_THRESH} & MQ < {params.MQ_MAX_THRESH}\" {input.Filter5} | bgzip -c > {output.Filter6};"
+        
+        #"vcffilter -f \"MQ > {params.MQ_MIN_THRESH} & MQ < {params.MQ_MAX_THRESH}\" {input.Filter5} | bgzip -c > {output.Filter6};"
+        "bcftools filter -i \"MQ > {params.MQ_MIN_THRESH} && MQ < {params.MQ_MAX_THRESH}\" {input.Filter5} | bgzip -c > {output.Filter6};"
         "bcftools stats {output.Filter6} > {output.stats};"
 
 #13) Separate out Indel files and SNP files in Biallelic files.
