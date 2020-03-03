@@ -1,0 +1,25 @@
+__default__:
+  #partition: chimera
+  queue: express
+  cores: 1
+  mem: 3750
+  time: '180'
+  name: $(basename $(pwd)):{rule}:{wildcards}
+  output: logs/{rule}:{wildcards}.stdout
+  error: logs/{rule}:{wildcards}.stderr
+liftOverVCFs:
+    cores: 4
+    mem: 3750
+    time: '180'
+Biallelic_Combine_Indels_and_SNPs:
+    cores: 4
+    mem: 3750
+    time: '180'
+recombineChunks:
+    cores: 4
+    mem: 3750
+    time: '180'
+recombineChromosomes:
+    cores: 4
+    mem: 3750
+    time: '180'

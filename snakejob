@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+# -m {cluster.partition}"
+
+# max concurrent jobs
+njobs=500
+set -e
+
+if [ ! -d "cluster" ]; then
+  mkdir cluster
+fi
+
+curdir="$(pwd)"
+jname="$(basename $curdir)"
+
+config=$1
+
+if [ ! -e $config ]; then
+	config_file=config.yaml
+else
+	config_file=$config
+
+fi
+
+# use bash getopt to use short flags
+config='config.yaml'
+snakefile='Snakefile'
+dryrun=""
+
+print_usage() {
+  printf "Usage: ./snakejob [-h] [-c] config.yaml [-s] Snakefile\nOptions:\n\t-c config file\n\t-s Snakefile\n\t-n dry run mode\n"
+}
+
+while getopts 'c:s:nh' flag; do
+  case "${flag}" in
+    c) config="${OPTARG}" ;;
+    s) snakefile="${OPTARG}" ;;
+    n) dryrun="-n" ;;
+    h) print_usage
+       exit 1 ;;
+  esac
+done
+
+
+echo config used is $config
+echo snakefile used is $snakefile
+
+if [ ! -z "$dryrun" ];then
+	echo "dry run mode"
+fi
+
+if [ ! -e $config ]; then
+	echo "error: config file does not exist" 
+	exit 0
+fi
+
+if [ ! -e $snakefile ]; then
+	echo "error: snakefile does not exist"
+	exit 0
+fi
+
+#exit 0 
+
+bsub=("bsub -K -J $jname:{rule}:{wildcards}"
+"-P acc_als-omics "
+"-q {cluster.queue} "
+"-n {cluster.cores} -R \"span[hosts=1] select[mem>{cluster.mem}]"
+"rusage[mem={cluster.mem}]\" -W {cluster.time} -L /bin/bash"
+"-oo cluster/{rule}:{wildcards}.stdout"
+"-eo cluster/{rule}:{wildcards}.stderr < ")
+
+snakemake -u cluster.yaml --cluster-sync "${bsub[*]}" \
+  --local-cores 4 --max-jobs-per-second 5 \
+  --jobs $njobs \
+  --restart-times 3 \
+  -pr \
+  -s $snakefile --configfile $config \
+  $dryrun
+

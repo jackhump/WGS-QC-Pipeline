@@ -181,15 +181,18 @@ rule filterRegionsAndSamples:
         blacklist_file = blacklistFile
     output:
         blacklist_filtered = tempFolder + '{chr}_filtered.vcf.gz',
-        stats = statsFolder + '{chr}_filtered_stats.txt'
+        stats1 = statsFolder + '{chr}_full_Initial_stats.txt'
+        stats2 = statsFolder + '{chr}_full_BlacklistFiltered_stats.txt'
     params:
         sample_filter_string = sample_filter_string
     shell:
         "ml vcftools/0.1.15;"
         "ml bcftools/1.9;"
+        "tabix -f {input.vcfgz};"
+        "bcftools stats {input.vcfgz} > {output.stats1};"
         "vcftools --gzvcf {input.vcfgz} {params.sample_filter_string} --exclude-positions {input.blacklist_file} --stdout --recode --recode-INFO-all | bgzip -c > {output.blacklist_filtered};"
         "tabix -f  {output.blacklist_filtered};"
-        "bcftools stats {output.blacklist_filtered} > {output.stats};"
+        "bcftools stats {output.blacklist_filtered} > {output.stats2};"
 
 
 # chunk number set by user
@@ -201,7 +204,7 @@ rule chunk:
         chrLengths = chromosomeLengths
     output:
         chunked = tempFolder + '{chr}_{chunk}_chunked.vcf.gz',
-        stats_output = statsFolder + '{chr}_{chunk}_stats.txt'
+        stats_output = statsFolder + '{chr}_{chunk}_Chunk_stats.txt'
     params:
         chunkString = ''
     message: "Creating chunk {wildcards.chunk} of {NUM_CHUNK} for {wildcards.chr}"
@@ -232,7 +235,7 @@ rule Filter0_separateBiallelics:
         chunked = tempFolder + '{chr}_{chunk}_chunked.vcf.gz'
     output:
         biallelic_Filter0 = tempFolder + '{chr}' + '_{chunk}_Biallelic.recode.vcf.gz',
-        stats = statsFolder + '{chr}' + '_{chunk}_Biallelic.stats.txt'
+        stats = statsFolder + '{chr}' + '_{chunk}_separateBiallelic.stats.txt'
     #group: "per_chunk_filter"
     shell:
         "ml vcftools/0.1.15;"
@@ -403,8 +406,8 @@ rule Biallelic_Combine_Indels_and_SNPs:
         Filter7_SNPs = tempFolder + '{chr}_{chunk}_Filter7_SNPs.recode.vcf.gz',
         Filter6_Indels = tempFolder + '{chr}_{chunk}_Filter6_Indels.recode.vcf.gz'
     output:
-        Filter7 = tempFolder + '{chr}_{chunk}_Filter7.recode.vcf.gz',
-        stats = statsFolder + '{chr}_{chunk}_Filter7_stats.txt'
+        Filter7 = tempFolder + '{chr}_{chunk}_CombineSNPsIndels.recode.vcf.gz',
+        stats = statsFolder + '{chr}_{chunk}_CombineSNPsIndels_stats.txt'
     #group: "per_chunk_filter"
     shell:
         "ml bcftools/1.9;"
@@ -532,11 +535,13 @@ rule filterMAF:
     input:
         outFolder + 'chrAll_QCFinished.recode.vcf.gz'
     output:
-        outFolder + 'chrAll_QCFinished.MAF_' + MAF_threshold + ".vcf.gz"
+        vcf = outFolder + 'chrAll_QCFinished.MAF_' + MAF_threshold + ".vcf.gz",
+        stats = statsFolder + 'chrAll_MAF_stats.txt'
     shell:
         "ml vcftools/0.1.15; ml bcftools/1.9;"
         "vcftools --gzvcf {input} --maf {MAF_threshold} --stdout --recode --recode-INFO-all | bgzip -c > {output};"
-        "tabix -f {output}"
+        "tabix -f {output};"
+        "bcftools stats {output.vcf} > {output.stats}"
  
 #20) Splits the chromosomes again if specified in config.
 #rule Split_ChrAll:
