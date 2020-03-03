@@ -117,7 +117,7 @@ if splitFinalVCF:
     final_output = expand(outFolder + '{chr}_QCFinished.recode.vcf.gz', allele = alleles,  chr = chrs)
 else:
     print(" * Output options: don't split by chromosome at the end")
-    final_output = expand(outFolder + 'chrAll_QCFinished.recode.vcf.gz', allele = alleles)
+    final_output = expand(outFolder + 'chrAll_QCFinished.recode.vcf.gz' )
 
 MAF_threshold = str(config["MAF_threshold"])
 
@@ -128,6 +128,7 @@ rule all:
             #expand(tempFolder + '{chr}_{chunk}_chunked.vcf.gz', chr = chrs, chunk = chunks)
             #expand(outFolder + 'chrAll_QCFinished.recode.vcf.gz', allele = alleles)
             final_output,
+            outFolder + dataCode + "_stats_collated.txt",
             outFolder + 'chrAll_QCFinished.MAF_' + MAF_threshold + ".vcf.gz"
 
 # for each file in the VCF file - symlink to input folder
@@ -542,6 +543,18 @@ rule filterMAF:
         "vcftools --gzvcf {input} --maf {MAF_threshold} --stdout --recode --recode-INFO-all | bgzip -c > {output};"
         "tabix -f {output};"
         "bcftools stats {output.vcf} > {output.stats}"
+
+# put all stats outputs together to get numbers of variants at each stage
+rule collateStats:
+    input:
+        outFolder + 'chrAll_QCFinished.MAF_' + MAF_threshold + ".vcf.gz"
+    output:
+        outFolder + dataCode + "_stats_collated.txt"
+    params:
+        script = "scripts/collate_all_stats.R"
+    shell:
+        "ml R/3.6.0;"
+        "Rscript {params.script} {statsFolder} {output}"
  
 #20) Splits the chromosomes again if specified in config.
 #rule Split_ChrAll:
