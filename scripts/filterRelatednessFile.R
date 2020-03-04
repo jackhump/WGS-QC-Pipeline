@@ -28,7 +28,19 @@ if (length(args) > 2) {
 
 #read in file specified by input. Both input and output include paths to their files from the folder where the snakefile is
 
-relatedness <- read.table(input, sep = "\t", header=TRUE, stringsAsFactors = FALSE)
+df <- read.table(input, sep = "\t", header=TRUE, stringsAsFactors = FALSE)
+
+# remove duplicates comparing the same samples
+df <-  df[df$INDV1 != df$INDV2,]
+
+# filter on relatedness threshold
+related <- df[ df$RELATEDNESS_PHI > threshold, ]
+
+related_individuals <- unique(c(related$INDV1, related$INDV2) )
+
+# tally related pairings
+tally( c(related$INDV1, related$INDV2) )
+
 
 #3) Find unique combinations of Relatedness that pass the threshold
 

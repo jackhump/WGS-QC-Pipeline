@@ -128,6 +128,7 @@ rule all:
             #expand(tempFolder + '{chr}_{chunk}_chunked.vcf.gz', chr = chrs, chunk = chunks)
             #expand(outFolder + 'chrAll_QCFinished.recode.vcf.gz', allele = alleles)
             final_output,
+            outFolder + 'chrAll_QCFinished.relatedness2',
             outFolder + dataCode + "_stats_collated.txt",
             outFolder + 'chrAll_QCFinished.MAF_' + MAF_threshold + ".vcf.gz"
 
@@ -182,7 +183,7 @@ rule filterRegionsAndSamples:
         blacklist_file = blacklistFile
     output:
         blacklist_filtered = tempFolder + '{chr}_filtered.vcf.gz',
-        stats1 = statsFolder + '{chr}_full_Initial_stats.txt'
+        stats1 = statsFolder + '{chr}_full_Initial_stats.txt',
         stats2 = statsFolder + '{chr}_full_BlacklistFiltered_stats.txt'
     params:
         sample_filter_string = sample_filter_string
@@ -241,7 +242,9 @@ rule Filter0_separateBiallelics:
     shell:
         "ml vcftools/0.1.15;"
         "ml bcftools/1.9;"
+        "n_var=$(bcftools view -H {input.chunked} | wc -l);if [[ $n_var == 0 ]];then echo 'chunk is empty'; cp {input.chunked} {output.biallelic_Filter0}; else "
         "vcftools --gzvcf {input.chunked} --min-alleles 2 --max-alleles 2 --recode --recode-INFO-all --stdout | bgzip -c > {output.biallelic_Filter0};"
+        "fi;"
         #"bcftools view --threads 5 -m2 -M2 -v snps -Oz {input.vcfgz} > {output.biallelic_Filter0};" #may speed up QC pipeline slightly. Haven't tested
         "bcftools stats {output.biallelic_Filter0} > {output.stats};"
 
@@ -418,7 +421,7 @@ rule Biallelic_Combine_Indels_and_SNPs:
 #16) Filter via Inbreeding_Coef
 rule Filter8_Inbreeding_Coef:
     input:
-        Filter7 = tempFolder + '{chr}_{chunk}_Filter7.recode.vcf.gz'
+        Filter7 = tempFolder + '{chr}_{chunk}_CombineSNPsIndels.recode.vcf.gz'
     output:
         Filter8 = tempFolder + '{chr}_{chunk}_Filter8.recode.vcf.gz',
         stats = statsFolder + '{chr}_{chunk}_Filter8_stats.txt'
@@ -487,7 +490,7 @@ rule Filter9_Sample_Missingness:
         Filter8 = tempFolder + 'chrAll_Filter8.recode.vcf.gz' 
         #Filter8 = tempFolder + 'all_Filter8_sorted.recode.vcf.gz'
     output:
-        Filter9 = tempFolder + 'chrAll_Filter9.recode.vcf.gz',
+        Filter9 = outFolder + 'chrAll_QCFinished.recode.vcf.gz',
         stats = statsFolder + 'chrAll_Filter9_stats.txt'
     params:
         MISS_THRESH_INDI = MISS_THRESH_INDI,
@@ -501,47 +504,26 @@ rule Filter9_Sample_Missingness:
         #filter the sample missingness file for significance
         "/hpc/packages/minerva-centos7/R/3.6.0/lib64/R/bin/Rscript scripts/filterMissingnessIndividualFile.R {params.missingness_name}.imiss {params.MISS_THRESH_INDI} {params.missingness_filtered};"
 
-        #filter the samples with significant missingness out of vcf
-        "/hpc/packages/minerva-common/vcftools/0.1.15/bin/vcftools --gzvcf {input.Filter8} --remove {params.missingness_filtered} --stdout --recode --recode-INFO-all | bgzip -c > {output.Filter9};"
-
+        # if file is empty then skip
+        "n_missing=$(cat {params.missingness_filtered} | wc -l );"
+        "if [[ $n_missing -gt 0 ]];then "        
+        #else filter the samples with significant missingness out of vcf
+        "   /hpc/packages/minerva-common/vcftools/0.1.15/bin/vcftools --gzvcf {input.Filter8} --remove {params.missingness_filtered} --stdout --recode --recode-INFO-all | bgzip -c > {output.Filter9};"
+        "else cp  {input.Filter8}  {output.Filter9}; fi;"
         "/hpc/packages/minerva-centos7/bcftools/1.9/bin/bcftools stats {output.Filter9} > {output.stats};"
-
-#19) Filter via Relatedness
-rule Filter10_Relatedness:
-    input:
-        Filter9 = tempFolder + 'chrAll_Filter9.recode.vcf.gz'
-    output:
-        Final = outFolder + 'chrAll_QCFinished.recode.vcf.gz',
-        stats = statsFolder + 'chrAll_QCFinished_stats.txt'
-    params:
-        RELATEDNESS_THRESH = RELATEDNESS_THRESH,
-        relatedness_name = tempFolder + 'chrAll_Filter9',
-        relatedness_filtered = tempFolder + 'chrAll_Filter9_relatedness2_filtered.txt'
-    shell:
-        "ml vcftools/0.1.15; ml bcftools/1.9;ml R/3.6.0;"
-
-        #create relatedness file
-        "vcftools --gzvcf {input.Filter9} --relatedness2 --out {params.relatedness_name};"
-
-        #filter the relatedness file for significance
-        "Rscript scripts/filterRelatednessFile.R {params.relatedness_name}.relatedness2 {params.RELATEDNESS_THRESH} {params.relatedness_filtered};"
-
-        ##filter the samples with significant relatedness out of vcf. The RScript optimizes number of samples retained. More details about algorithm inside Rscript
-        "vcftools --gzvcf {input.Filter9} --remove {params.relatedness_filtered} --stdout --recode --recode-INFO-all | bgzip -c > {output.Final};"
-        "tabix -f {output.Final}; "
-        "bcftools stats {output.Final} > {output.stats};"
 
 # Filter on Minor Allele Frequency (MAF)
 rule filterMAF:
     input:
-        outFolder + 'chrAll_QCFinished.recode.vcf.gz'
+        Filter9 = outFolder + 'chrAll_QCFinished.recode.vcf.gz'
+        #outFolder + 'chrAll_QCFinished.recode.vcf.gz'
     output:
         vcf = outFolder + 'chrAll_QCFinished.MAF_' + MAF_threshold + ".vcf.gz",
         stats = statsFolder + 'chrAll_MAF_stats.txt'
     shell:
         "ml vcftools/0.1.15; ml bcftools/1.9;"
-        "vcftools --gzvcf {input} --maf {MAF_threshold} --stdout --recode --recode-INFO-all | bgzip -c > {output};"
-        "tabix -f {output};"
+        "vcftools --gzvcf {input} --maf {MAF_threshold} --stdout --recode --recode-INFO-all | bgzip -c > {output.vcf} ;"
+        "tabix -f {output.vcf};"
         "bcftools stats {output.vcf} > {output.stats}"
 
 # put all stats outputs together to get numbers of variants at each stage
@@ -567,3 +549,22 @@ rule collateStats:
 #    run:
 #        shell() # below creates a cyclic dependency - presumably due to using wildcards.chr
         #shell("ml bcftools/1.9;tabix -f  -p vcf {input.Final};tabix {input.Final} {wildcards.chr} > {output.Final_split};")
+        #
+        #
+# 
+#19) Filter via Relatedness
+rule Check_Relatedness:
+    input:
+        vcf = outFolder + 'chrAll_QCFinished.recode.vcf.gz'
+    output:
+        outFolder + 'chrAll_QCFinished.relatedness2'
+    params:
+        RELATEDNESS_THRESH = RELATEDNESS_THRESH,
+        relatedness_file = outFolder + 'chrAll_QCFinished',
+        relatedness_filtered = tempFolder + 'chrAll_Filter9_relatedness2_filtered.txt'
+    shell:
+        "ml vcftools/0.1.15; ml bcftools/1.9;ml R/3.6.0;"
+
+        #create relatedness file
+        "vcftools --gzvcf {input.vcf} --relatedness2 --out {params.relatedness_file};"
+    
