@@ -567,4 +567,4 @@ rule Check_Relatedness:
 
         #create relatedness file
         "vcftools --gzvcf {input.vcf} --relatedness2 --out {params.relatedness_file};"
-    
+   

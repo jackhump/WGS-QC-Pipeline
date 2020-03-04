@@ -35,9 +35,10 @@ indels <-  filter(df, step == "Filter6_Indels")
 
 # remove these counts as they are same as Filter6 when summed together
 # Filter_7 SNPs is the same as Filter7 + the Filter6_Indels
-df <- filter(df,! step %in% c("Filter6_Indels", "Filter6_SNPs", "Filter7_SNPs") )
+df <- filter(df,! step %in% c("Filter6_Indels", "Filter6_SNPs", "Filter7_SNPs", "Chunk") )
 
 # for filter 7 - sum Filter 7 and indel counts together
+df$step <- ifelse( df$step == "CombineSNPsIndels", yes = "Filter7", no = df$step)
 
 # fix chrAll steps and chunking steps
 df$step <- ifelse(grepl("_filtered_stats", df$file), yes = "FilterBlacklist", no = df$step)
