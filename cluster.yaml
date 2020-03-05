@@ -3,7 +3,7 @@ __default__:
   queue: express
   cores: 1
   mem: 3750
-  time: '180'
+  time: '600'
   name: $(basename $(pwd)):{rule}:{wildcards}
   output: logs/{rule}:{wildcards}.stdout
   error: logs/{rule}:{wildcards}.stderr
