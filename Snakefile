@@ -114,10 +114,10 @@ chrs = [i[1] for i in chr_sorted]
 symlinkedFiles = [ inFolder + chr + "_input.vcf.gz" for chr in chrs ] 
 
 if splitFinalVCF:
-    final_output = expand(outFolder + '{chr}_QCFinished.recode.vcf.gz', allele = alleles,  chr = chrs)
+    final_output = expand(outFolder + '{chr}_QCFinished.vcf.gz', allele = alleles,  chr = chrs)
 else:
     print(" * Output options: don't split by chromosome at the end")
-    final_output = expand(outFolder + 'chrAll_QCFinished.recode.vcf.gz' )
+    final_output = expand(outFolder + 'chrAll_QCFinished.vcf.gz' )
 
 MAF_threshold = str(config["MAF_threshold"])
 
@@ -127,10 +127,9 @@ rule all:
             #expand(tempFolder + '{chr}_filtered.vcf.gz', chr = chrs)
             #expand(tempFolder + '{chr}_{chunk}_chunked.vcf.gz', chr = chrs, chunk = chunks)
             #expand(outFolder + 'chrAll_QCFinished.recode.vcf.gz', allele = alleles)
-            final_output,
-            outFolder + 'chrAll_QCFinished.bed',
-            outFolder + dataCode + "_stats_collated.txt",
-            outFolder + 'chrAll_QCFinished.MAF_' + MAF_threshold + ".vcf.gz"
+            #final_output,
+            expand(  outFolder + 'chrAll_QCFinished_{file}.vcf.gz', file = ['full', 'MAF' + MAF_threshold ] ),
+            outFolder + "all_variant_stats_collated.txt"
 
 # for each file in the VCF file - symlink to input folder
 rule symlinkVCFs:
@@ -456,81 +455,58 @@ rule recombineChunks:
         tempFolder + '{chr}_Filter8.recode.vcf.gz'
     shell:
         "ml vcftools/0.1.15;ml vcflib/v1.0.0-rc0; ml bcftools/1.9;"
-        "vcf-concat {input} | bgzip -c > {output}"
+        "bcftools concat {input} | bgzip -c > {output}"
 
 rule recombineChromosomes:
     input:
         expand(tempFolder + '{chr}_Filter8.recode.vcf.gz', chr = chrs) # expand both chr and allele
     output:
-        recombined = tempFolder + 'chrAll_Filter8.recode.vcf.gz',
-        stats = statsFolder + 'chrAll_Filter8_stats.txt'
+        recombined = tempFolder + 'chrAll_Recombined.vcf.gz',
+        stats = statsFolder + 'chrAll_Recombined_stats.txt'
     shell:
-        "ml vcftools/0.1.15;ml vcflib/v1.0.0-rc0; ml bcftools/1.9;"
-        "vcf-concat {input} | bgzip > {output.recombined};"
+        "ml bcftools/1.9;"
+        "bcftools concat {input} | bgzip > {output.recombined};"
         "bcftools stats {output.recombined} > {output.stats};"
 
-# leave out sorting for now 
-#rule sort:
-#    # crazy memory intensive to do this - must be better way
-#    input:
-#        Filter8 = tempFolder + 'chrAll_Filter8.recode.vcf.gz'
-#    output:
-#        Filter8_sort = tempFolder + 'chrAll_Filter8_sorted.recode.vcf.gz',
-#        stats = statsFolder + 'chrAll_Filter8_sorted_stats.txt'
-#    params:
-#        memory = sort_mem
-#    shell:
-#        "ml bcftools/1.9;"
-#        "bcftools sort {input.Filter8} -Oz -m {params.memory} > {output.Filter8_sort};"
-#        "bcftools stats {output.Filter8_sort} > {output.stats};"
+## STEP 4: QC ON ALL DATA TOGETHER IN PLINK
 
+# make binary PLINK file
+rule convertVCFtoPLINK:
+    input:
+        vcf = tempFolder + 'chrAll_Recombined.vcf.gz'
+    output:
+        bed = tempFolder + 'chrAll_Recombined.bed',
+        bim =  tempFolder + 'chrAll_Recombined.bim',
+        fam =  tempFolder + 'chrAll_Recombined.fam'
+    params:
+        prefix = tempFolder + 'chrAll_Recombined',
+        #relatedness_filtered = tempFolder + 'chrAll_Filter9_relatedness2_filtered.txt'
+    shell:
+        "ml plink2;"
+        "plink2 --vcf {input} --make-bed --out {params.prefix}"
+ 
 #18) Filter via Sample level Missingness
 rule Filter9_Sample_Missingness:
     input:
-        Filter8 = tempFolder + 'chrAll_Filter8.recode.vcf.gz' 
+        bed = tempFolder + 'chrAll_Recombined.bed',
+        bim = tempFolder + 'chrAll_Recombined.bim',
+        fam = tempFolder + 'chrAll_Recombined.fam'
         #Filter8 = tempFolder + 'all_Filter8_sorted.recode.vcf.gz'
     output:
-        Filter9 = outFolder + 'chrAll_QCFinished.recode.vcf.gz',
-        stats = statsFolder + 'chrAll_Filter9_stats.txt'
+        bed = tempFolder + 'chrAll_Filter9.bed',
+        bim = tempFolder + 'chrAll_Filter9.bim',
+        fam = tempFolder + 'chrAll_Filter9.fam'
     params:
         MISS_THRESH_INDI = MISS_THRESH_INDI,
-        missingness_name = tempFolder + 'chrAll_Filter8',
-        missingness_filtered = tempFolder + 'chrAll_Filter8_imiss_filtered.txt'
+        prefix = tempFolder + 'chrAll_Filter9',
     shell:
-        "ml vcftools/0.1.15; ml bcftools/1.9;ml R/3.6.0;"
-        #create sample missingness file
-        "/hpc/packages/minerva-common/vcftools/0.1.15/bin/vcftools --gzvcf {input.Filter8} --missing-indv --out {params.missingness_name};"
-
-        #filter the sample missingness file for significance
-        "/hpc/packages/minerva-centos7/R/3.6.0/lib64/R/bin/Rscript scripts/filterMissingnessIndividualFile.R {params.missingness_name}.imiss {params.MISS_THRESH_INDI} {params.missingness_filtered};"
-
-        # if file is empty then skip
-        "n_missing=$(cat {params.missingness_filtered} | wc -l );"
-        "if [[ $n_missing -gt 0 ]];then "        
-        #else filter the samples with significant missingness out of vcf
-        "   /hpc/packages/minerva-common/vcftools/0.1.15/bin/vcftools --gzvcf {input.Filter8} --remove {params.missingness_filtered} --stdout --recode --recode-INFO-all | bgzip -c > {output.Filter9};"
-        "else cp  {input.Filter8}  {output.Filter9}; fi;"
-        "/hpc/packages/minerva-centos7/bcftools/1.9/bin/bcftools stats {output.Filter9} > {output.stats};"
-
-# make binary PLINK file for KING
-rule convertVCFtoPLINK:
-    input:
-        vcf = outFolder + 'chrAll_QCFinished.recode.vcf.gz'
-    output:
-        bed = outFolder + 'chrAll_QCFinished.bed',
-        bim =  outFolder + 'chrAll_QCFinished.bim',
-        fam =  outFolder + 'chrAll_QCFinished.fam'
-    params:
-        stem = outFolder + 'chrAll_QCFinished',
-        #relatedness_filtered = tempFolder + 'chrAll_Filter9_relatedness2_filtered.txt'
-    shell:
-        "ml vcftools/0.1.15; ml bcftools/1.9;ml R/3.6.0;"
         "ml plink2;"
-        "plink2 --vcf {input} --make-bed --out {params.stem}"
- 
+        "plink2  --bed {input.bed} --bim {input.bim} --fam {input.fam} --mind {MISS_THRESH_INDI} --out {params.prefix} --make-bed "
+
+# Calculate Relatedness
 rule KingRelatedness:
     input:
-        bed =  outFolder + 'chrAll_QCFinished.bed'
+        bed =  tempFolder + 'chrAll_Filter9.bed'
     output:
         samples_to_keep = relatedFolder + 'chrAll_QCFinishedunrelated.txt'
     params:
@@ -542,60 +518,62 @@ rule KingRelatedness:
         "king -b {input.bed} --unrelated --degree 3 --prefix {params.prefix};"
 
 # king outputs a set of individuals not related closer than third degree (a blood relative which includes the individual’s first-cousins, great-grandparents or great grandchildren)
-# remove those individuals and convert back to VCF
+# remove those individuals 
 rule removeRelatedSamples:
     input:
-        bed = outFolder + 'chrAll_QCFinished.bed',
-        bim = outFolder + 'chrAll_QCFinished.bim',
-        fam = outFolder + 'chrAll_QCFinished.fam',
+        bed = tempFolder + 'chrAll_Filter9.bed',
+        bim = tempFolder + 'chrAll_Filter9.bim',
+        fam = tempFolder + 'chrAll_Filter9.fam',
         samples_to_keep = relatedFolder + 'chrAll_QCFinishedunrelated.txt'
     output:
-        bed = outFolder + 'chrAll_QCFinished.unrelated.full.bed',
-        bim =  outFolder + 'chrAll_QCFinished.unrelated.full.bim',
-        fam =  outFolder + 'chrAll_QCFinished.unrelated.full.fam'
+        bed = outFolder + 'chrAll_QCFinished_full.bed',
+        bim =  outFolder + 'chrAll_QCFinished_full.bim',
+        fam =  outFolder + 'chrAll_QCFinished_full.fam'
     params:
-        prefix =  outFolder + 'chrAll_QCFinished.unrelated.full'
+        prefix =  outFolder + 'chrAll_QCFinished_full'
     shell:
         "ml plink2;"
         "plink2  --bed {input.bed} --bim {input.bim} --fam {input.fam} --keep {input.samples_to_keep} --out {params.prefix} --make-bed "
 
-# Then filter on Minor Allele Frequency (MAF)
+# Filter on Minor Allele Frequency (MAF)
 rule filterMAF:
     input:
-       bed = outFolder + 'chrAll_QCFinished.unrelated.full.bed',
-       bim = outFolder + 'chrAll_QCFinished.unrelated.full.bim',
-       fam = outFolder + 'chrAll_QCFinished.unrelated.full.fam'
+       bed = outFolder + 'chrAll_QCFinished_full.bed',
+       bim = outFolder + 'chrAll_QCFinished_full.bim',
+       fam = outFolder + 'chrAll_QCFinished_full.fam'
     output:
-       bed = outFolder + 'chrAll_QCFinished.unrelated.MAF' + MAF_threshold + ".bed",
-       bim = outFolder + 'chrAll_QCFinished.unrelated.MAF' + MAF_threshold + ".bim",
-       fam = outFolder + 'chrAll_QCFinished.unrelated.MAF' + MAF_threshold + ".fam"
+       bed = outFolder + 'chrAll_QCFinished_MAF' + MAF_threshold + ".bed",
+       bim = outFolder + 'chrAll_QCFinished_MAF' + MAF_threshold + ".bim",
+       fam = outFolder + 'chrAll_QCFinished_MAF' + MAF_threshold + ".fam"
     params:
-        prefix =  outFolder + 'chrAll_QCFinished.unrelated.MAF' + MAF_threshold
+        prefix =  outFolder + 'chrAll_QCFinished_MAF' + MAF_threshold
     shell:
         "ml plink2;"
         "plink2 --bed {input.bed} --bim {input.bim} --fam {input.fam} --maf {MAF_threshold} --out {params.prefix} --make-bed "
 
+# Convert Full and MAF-filtered variant sets back to VCF
 rule convertPlinkToVCF:
     input:
-        bed = outFolder + 'chrAll_QCFinished.{file}.bed',
-        bim = outFolder + 'chrAll_QCFinished.{file}.bim',
-        fam = outFolder + 'chrAll_QCFinished.{file}.fam'
+        bed = outFolder + 'chrAll_QCFinished_{file}.bed',
+        bim = outFolder + 'chrAll_QCFinished_{file}.bim',
+        fam = outFolder + 'chrAll_QCFinished_{file}.fam'
     output:
-        vcf = outFolder + 'chrAll_QCFinished.{file}.vcf.gz',
-        stats = statsFolder + 'chrAll_QCFinished.{file}.vcf.gz'
+        vcf = outFolder + 'chrAll_QCFinished_{file}.vcf.gz',
+        stats = statsFolder + 'chrAll_QCFinished_{file}_stats.txt'
     params:
-        prefix =  outFolder + 'chrAll_QCFinished.{file}'
+        prefix =  outFolder + 'chrAll_QCFinished_{file}'
     shell:
         "ml plink2;ml bcftools/1.9;"
         "plink2 --bed {input.bed} --bim {input.bim} --fam {input.fam} --recode vcf bgz --out {params.prefix};"
+        "tabix {output.vcf};"
         "bcftools stats {output.vcf} > {output.stats}"
 
 # put all stats outputs together to get numbers of variants at each stage
 rule collateStats:
     input:
-        expand(  outFolder + 'chrAll_QCFinished.{file}.vcf.gz', file = ['unrelated.full', 'unrelated.MAF' + MAF_threshold ] )
+        expand(  outFolder + 'chrAll_QCFinished_{file}.vcf.gz', file = ['full', 'MAF' + MAF_threshold ] )
     output:
-        outFolder + dataCode + "_stats_collated.txt"
+        outFolder + "all_variant_stats_collated.txt"
     params:
         script = "scripts/collate_all_stats.R"
     shell:
