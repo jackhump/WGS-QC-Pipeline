@@ -32,9 +32,12 @@ vcfFileList should be a text file containing the full paths to each file.
 
 Variants must have been called using GATK. Check whether your data has VQSLOD, DP, MQ and InbreedingCoef fields!
 
+## Specifying samples to remove
+
+VCF IDs for samples to be removed from the analysis should be in a text file. The relative path to this file should be specified in the config.yaml under the key `removeSamples`
+
 
 # Lifting over to hg19
-
 
 This requires the human genome fasta file hg38.fa to be present in `data/`. Symlink this from wherever you keep a copy.
 
@@ -43,23 +46,24 @@ In the config, set liftOver to True - default is False.
 # Parallel execution on MSSM HPC
 
 ```
-./snakejob -c [path to config.yaml] <-n>
+./snakejob -c [path to config.yaml] <-n> <-a> 
 ```
 
 `-n` specifies dry run mode. Snakemake will list the steps that it plans to execute.
-
+`-a` specifies the account code for running jobs on the cluster
 
 # Config Options
 
+kept inside config.yaml
 
 ###General Options
 
-*splitFinalVCF*: If true, splits the final output vcf.gz to create per chromosome vcf.gz files
+*splitFinalVCF*: _True,False_ If true, splits the final output vcf.gz to create per chromosome vcf.gz files - CURRENTLY HARDCODED OFF
 
-*blacklist*: If true, filters initially based on blacklist file provided
 
-*blacklist_file*: Path to blacklist file. hg38 blacklist is contained within `/data` folder. Blacklist was taken from http://mitra.stanford.edu/kundaje/akundaje/release/blacklists/hg38-human/
+*blacklist_file*: _FILE_ Path to blacklist file. hg38 blacklist is contained within `/data` folder. Blacklist was taken from http://mitra.stanford.edu/kundaje/akundaje/release/blacklists/hg38-human/
 
+*liftOver* <True,False> - whether to lift over the variants from hg19 to hg38. Requires hg38 FASTA reference file to be linked to  
 
 ###Chunking Metrics
 
