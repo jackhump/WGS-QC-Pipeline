@@ -1,14 +1,165 @@
 # WGS QC Pipeline
+------------------
+Written by Jack Humphrey and Sanan Venkatesh
 
-A snakemake pipeline for performing QC on WGS VCF files. Includes QCs for Minor Allele Frequency (MAF), Hardy Weinberg Equilibrium (HWE), Relatedness, and Missingness (sample and SNP). Takes in a gzipped vcf file.
+A snakemake pipeline for performing quality control (QC) on whole genome sequencing (WGS) data. 
+Includes filters for Genotype quality (MQ, DP, GQ, VQSLOD), minor allele frequency, relatedness, and missingness (sample and variant). 
 
-Based on script in Adelson et al. 2019
+Heavily inspired by *Adelson, R.P., Renton, A.E., Li, W. et al. Empirical design of a variant quality control pipeline for whole genome sequencing data using replicate discordance. Sci Rep 9, 16156 (2019)*
 
-EXPERIMENTAL RELEASE
+## Dependencies and Installation
 
-Currently version: 1.21
+This pipeline is set to work with the Mount Sinai HPC 'Minerva' which uses the LSF queuing system and the Lmod module environment system. It is assumed that the following dependencies are present:
 
-# STEP 0: Estimate DP, MQ and VQSLOD parameters from your own data
+- python 3.6.8 (modules snakemake, yaml, pandas, numpy, itertools, math, csv, re, os)
+- R 3.6.0 (packages dplyr, readr, stringr)
+- bcftools 1.9
+- king/2.1.6
+- vcftools/0.1.15
+- vcflib/v1.0.0-rc0
+- plink2
+
+All of these dependencies are present on Minerva except for snakemake. Install this through conda:
+
+```
+ml anaconda3/latest
+conda create –n WGS-QC-pipeline
+conda config --add channels bioconda
+conda config --add channels defaults
+conda config --add channels conda-forge
+conda install snakemake
+conda activate WGS-QC-pipeline
+```
+
+
+## Inputs
+
+A set of jointly called VCFs from GATK, split by chromosome. Each file must have "chr1","chr2", etc in the file name.
+
+The full paths to each file should be in a text file. 
+
+Variants *must* have been called using GATK. Check whether your data has VQSLOD, DP, MQ and InbreedingCoef fields.
+
+All config options are stored in `config.yaml`.
+
+## Outputs
+
+Using the `dataCode` parameter specified in the config.yaml, the following subfolders will be created:
+
+- <dataCode>/input/
+- <dataCode>/temp/
+- <dataCode>/output/
+- <dataCode>/relatedness/
+- <dataCode>/stats/
+ 
+The initial VCF files will be symlinked to `input/`. Any intermediary files will be written to `temp/`. Outputs from KING on the relatedness between samples will be written to `relatedness/`. Statistics on numbers of variants from each step will be written to `stats/`. Final output files will be written to `output`.
+
+The output files will be:
+
+- **chrAll_QCFinished_full** - the full set of QC'd variants, in VCF and PLINK format
+- **chrAll_QCFinished_MAF<threshold>** - the minor allele frequency filtered set of QC'd variants, in VCF and PLINK format
+- **all_variant_stats_collated.txt** - the total number of variants retained at each step of the pipeline.
+ 
+
+## Specifying samples to remove
+
+VCF IDs for samples to be removed from the analysis should be in a text file. The relative path to this file should be specified in the config.yaml under the key `removeSamples`
+
+
+
+# Parallel execution on MSSM HPC
+
+```
+./snakejob -c [path to config.yaml] <-n> <-a> 
+```
+
+`-n` specifies dry run mode. Snakemake will list the steps that it plans to execute.
+`-a` specifies the account code for running jobs on the cluster
+
+
+# Config Options
+
+kept inside config.yaml
+
+### General Options
+
+**dataCode**: _string_
+
+The name of your analysis. All files will be written to subfolders of a folder with this name.
+
+**vcfFileList**: _FILE_
+
+Path to file containing full paths to each joint called VCF file.
+
+**samples_to_remove**: _FILE_, False
+
+Path to file containing VCF sample IDs of any samples to be removed. Otherwise set as False.
+
+**blacklist_file**: _FILE_ 
+
+Path to blacklist file. hg38 blacklist is contained within `/data` folder. 
+Current blacklist taken from https://github.com/Boyle-Lab/Blacklist/blob/master/lists/hg38-blacklist.v2.bed.gz; ref: https://www.nature.com/articles/s41598-019-45839-z
+
+**liftOverhg19hg38**: _True,False_
+
+whether to lift over the variants from hg19 to hg38. This requires the human genome fasta file `hg38.fa` to be present in `data/`. Symlink this from wherever you keep a copy.
+
+**NUM_CHUNK**: _number_ 
+
+How many pieces to break up the chromosome. This allows for parallel execution. Chunk numbers of 4 have been tested and work without error. Larger numbers may cause errors due to the creation of empty chunks 
+
+**chromosomeLengths**: _FILE_ 
+
+Text file of chromosome lengths. Used for chunking. hg38 chromosome sizes is contained within `data` folder. Sizes were taken from IGV at https://github.com/igvteam/igv/blob/master/genomes/sizes/hg38.chrom.sizes
+
+**splitFinalVCF**: _True,False_ 
+
+If true, splits the final output vcf.gz to create per chromosome vcf.gz files - CURRENTLY HARDCODED OFF
+
+### QC Thresholds
+
+**MISS_THRESH_SNP**: _number_ 
+
+Threshold of missingness of a SNP, above which we exlude SNP from analysis. Default is 0.15
+
+**ODP**: _number_
+
+Overall Read Depth. Default is 5000. Number is dependent on total number of samples in cohort multiplied by the coverage. See below for more details.
+
+**MQ_MIN**: _number_
+
+Mapping Quality lower threshold. Default is 58.75
+
+**MQ_MAX**: _number_
+
+Mapping Quality upper threshold. Default is 61.25
+
+**VQSLOD**: _number_ 
+
+Variant quality log-odds score from GATK. Applied only to SNPs. Default is 7.81
+
+**GDP**: _number_
+
+Genotype level read depth. Default is 10.
+
+**GQ**: _number_
+
+Genotype Quality. Default is 20.
+
+**Inbreeding Coefficient**: _number_
+
+Used instead of Hardy-Weinberg. Default is -0.8.
+
+**MISS_THRESH_INDI**: _number_
+
+Individual missingness threshold. Default i 0.1.
+
+**RELATEDNESS_THRESH**: _number_
+
+Threshold of relatedness, above which we exclude a Sample based on relation to other Samples. Default is .125
+
+
+# How to estimate DP, MQ and VQSLOD thresholds from your own data
 
 using one of your autosomal VCF files (say chr22 for example), create diagnostic plots for the VCF parameters MQ (mapping quality), DP (total read depth) and VQSLOD (variant quality score log-odds):
 
@@ -22,127 +173,18 @@ This will create the folder scripts/<data code> which will contain the raw numbe
 In our experience, MQ and VQSLOD do not change between datasets but DP does as it corresponds to the total read depth at each base - the average DP being the average per-sample read depth (usually 30X) multiplied by the sample number. 
 
 So 300 samples at 30x coverage should have a median DP of around 9000.
- 
 
-# Inputs
-
-A set of jointly called VCFs, split by chromosome. Each file must have "chr1","chr2", etc in the file name.
-
-vcfFileList should be a text file containing the full paths to each file. 
-
-Variants must have been called using GATK. Check whether your data has VQSLOD, DP, MQ and InbreedingCoef fields!
-
-## Specifying samples to remove
-
-VCF IDs for samples to be removed from the analysis should be in a text file. The relative path to this file should be specified in the config.yaml under the key `removeSamples`
-
-
-# Lifting over to hg19
-
-This requires the human genome fasta file hg38.fa to be present in `data/`. Symlink this from wherever you keep a copy.
-
-In the config, set liftOver to True - default is False.
-
-# Parallel execution on MSSM HPC
-
-```
-./snakejob -c [path to config.yaml] <-n> <-a> 
-```
-
-`-n` specifies dry run mode. Snakemake will list the steps that it plans to execute.
-`-a` specifies the account code for running jobs on the cluster
-
-# Config Options
-
-kept inside config.yaml
-
-###General Options
-
-*splitFinalVCF*: _True,False_ If true, splits the final output vcf.gz to create per chromosome vcf.gz files - CURRENTLY HARDCODED OFF
-
-
-*blacklist_file*: _FILE_ Path to blacklist file. hg38 blacklist is contained within `/data` folder. Blacklist was taken from http://mitra.stanford.edu/kundaje/akundaje/release/blacklists/hg38-human/
-
-*liftOver* <True,False> - whether to lift over the variants from hg19 to hg38. Requires hg38 FASTA reference file to be linked to  
-
-###Chunking Metrics
-
-*NUM_CHUNK*: How much to break up the chromosome. For example, if 4, every chromosome will be broken in four and processed in parallel. Too high values may cause bugs
-
-*chromosomeLengths*: File of chromosome lengths. Used for chunking. hg38 chromosome sizes is contained within `data` folder. Sizes were taken from IGV at https://github.com/igvteam/igv/blob/master/genomes/sizes/hg38.chrom.sizes
-
-
-
-
-###File Configs
-
-*inFolder*: Folder where input files are located
-
-*outFolder*: Folder where final output is stored
-
-*interFolder*: Folder where intermediate files are stored. These are files such as relatedness, missingness, and other metrics.
-
-*statsFolder*: Folder where stats are stored.
-
-*gzvcf_suffix*: Suffix for gzipped vcf file. Used to extract file names.
-
-
-
-
-###QC Metrics
-
-*MISS_THRESH_SNP*: Threshold of missingness of a SNP, above which we exlude SNP from analysis. Default is 0.15
-
-*ODP*: Overall Read Depth. Default is 5000. Paper's default is 25000. Should be dependent on total number of samples in cohort, and coverage. See Step 0.
-
-*MQ_MIN*: Mapping Quality lower threshold. Default is 58.75
-
-*MQ_MAX*: Mapping Quality upper threshold. Default is 61.25
-
-*VQSLOD*: Filtering criteria applied only to SNVs. Default is 7.81
-
-*GDP*: Genotype level read depth. Default is 10.
-
-*GQ*: Genome Quality. Default is 20.
-
-*Inbreeding Coefficient*: Default is -0.8
-
-*MISS_THRESH_INDI*: Threshold of missingness of a Sample, above which we exclude Sample from analysis. Default is .1
-
-*RELATEDNESS_THRESH*: Threshold of relatedness, above which we exclude a Sample based on relation to other Samples. Default is .125
-
-# To do
-
-Enable option to make intermediate outputs temporary
-Include plotting options
-Shift from vcf-concat to bcftools concat (might be faster)
-Chunk bug fix (referenced below)
-If blacklist is true, but no path to a file is provided, use default
-
-Test if current blacklist step works
-Test if current bsub command works
-
-Rename Filter steps so that numbers work out (Maybe add "Step1, etc" before Filter names)
 
 # Known bugs
 
 High chunk number will cause empty files to be written. At some point, shift chunking over to SnpSift to chunk based on file size rather than chromosome location. Will also speed up chunking related processes.
 
-# Conda recipe
+Please report any bugs as issues on this github.
 
-conda create –n 191115_vcf_QC_snakemake_env
-
-conda config --add channels bioconda
-
-conda config --add channels defaults
-
-conda config --add channels conda-forge
-
-conda install snakemake
 
 # Filter Levels
 
-Filter-1: Filter for provided blacklist, if any
+Filter-1: Filter for provided blacklist and any known samples for removal.
 
 Chunk: Chunks chromosomes, if chunking value is set to >1
 
@@ -168,3 +210,4 @@ Filter9: Filter via Sample level Missingness
 
 Filter10: Filter via Relatedness
 
+Filter11: Filter by Minor Allele Frequency
