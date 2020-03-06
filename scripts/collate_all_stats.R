@@ -43,11 +43,11 @@ df$step <- ifelse( df$step == "CombineSNPsIndels", yes = "Filter7", no = df$step
 # fix chrAll steps and chunking steps
 df$step <- ifelse(grepl("_filtered_stats", df$file), yes = "FilterBlacklist", no = df$step)
 
-df$step <- ifelse(df$chr == "chrAll", yes = df$chunk, no = df$step)
-df$step <- ifelse(df$step == "", yes = "chunk", no = df$step)
+
+df$step <- ifelse(df$step == "", yes = df$chunk, no = df$step)
 
 # remove chromosome concat count - duplicate
-df <- filter(df, file != "chrAll_Filter8")
+df <- filter(df, file != "chrAll_Recombined")
 
 # sum chunked steps together
 summary <- df %>% group_by(step) %>%
@@ -68,8 +68,8 @@ filter_dict <- c(
 "Filter7" = "Variant Quality (VQSLOD)",
 "Filter8" = "Inbreeding Coefficient",
 "Filter9" = "Sample Missingness",
-"QCFinished" = "Sample Relatedness",
-"MAF" = "Minor alelle frequency >= 0.01"
+"full" = "Sample Relatedness",
+"MAF0.01" = "Minor alelle frequency >= 0.01"
 )
 
 summary$filter <- filter_dict[ match(summary$step, names(filter_dict) ) ]
