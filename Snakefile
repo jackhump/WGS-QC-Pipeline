@@ -129,7 +129,6 @@ rule all:
             #expand(outFolder + 'chrAll_QCFinished.recode.vcf.gz', allele = alleles)
             final_output,
             outFolder + 'chrAll_QCFinished.bed',
-            outFolder + 'chrAll_QCFinished.con',
             outFolder + dataCode + "_stats_collated.txt",
             outFolder + 'chrAll_QCFinished.MAF_' + MAF_threshold + ".vcf.gz"
 
@@ -513,12 +512,14 @@ rule Filter9_Sample_Missingness:
         "else cp  {input.Filter8}  {output.Filter9}; fi;"
         "/hpc/packages/minerva-centos7/bcftools/1.9/bin/bcftools stats {output.Filter9} > {output.stats};"
 
-# make binary PLINK file
-rule plinkMakeBed:
+# make binary PLINK file for KING
+rule convertVCFtoPLINK:
     input:
         vcf = outFolder + 'chrAll_QCFinished.recode.vcf.gz'
     output:
-        outFolder + 'chrAll_QCFinished.bed'
+        bed = outFolder + 'chrAll_QCFinished.bed',
+        bim =  outFolder + 'chrAll_QCFinished.bim',
+        fam =  outFolder + 'chrAll_QCFinished.fam'
     params:
         stem = outFolder + 'chrAll_QCFinished',
         #relatedness_filtered = tempFolder + 'chrAll_Filter9_relatedness2_filtered.txt'
@@ -531,7 +532,6 @@ rule KingRelatedness:
     input:
         bed =  outFolder + 'chrAll_QCFinished.bed'
     output:
-        con = outFolder + 'chrAll_QCFinished.con',
         samples_to_keep = relatedFolder + 'chrAll_QCFinishedunrelated.txt'
     params:
         prefix = relatedFolder + 'chrAll_QCFinished'
@@ -546,40 +546,54 @@ rule KingRelatedness:
 rule removeRelatedSamples:
     input:
         bed = outFolder + 'chrAll_QCFinished.bed',
+        bim = outFolder + 'chrAll_QCFinished.bim',
+        fam = outFolder + 'chrAll_QCFinished.fam',
         samples_to_keep = relatedFolder + 'chrAll_QCFinishedunrelated.txt'
     output:
-        outFolder + 'chrAll_QCFinished.unrelated.bed'
+        bed = outFolder + 'chrAll_QCFinished.unrelated.full.bed',
+        bim =  outFolder + 'chrAll_QCFinished.unrelated.full.bim',
+        fam =  outFolder + 'chrAll_QCFinished.unrelated.full.fam'
     params:
-        prefix =  outFolder + 'chrAll_QCFinished.unrelated.full.'
+        prefix =  outFolder + 'chrAll_QCFinished.unrelated.full'
     shell:
         "ml plink2;"
-        "plink2 --bed {input.bed} --keep {input.samples_to_keep} --out {params.prefix} "
+        "plink2  --bed {input.bed} --bim {input.bim} --fam {input.fam} --keep {input.samples_to_keep} --out {params.prefix} --make-bed "
 
 # Then filter on Minor Allele Frequency (MAF)
 rule filterMAF:
     input:
-       outFolder + 'chrAll_QCFinished.unrelated.full.bed' 
+       bed = outFolder + 'chrAll_QCFinished.unrelated.full.bed',
+       bim = outFolder + 'chrAll_QCFinished.unrelated.full.bim',
+       fam = outFolder + 'chrAll_QCFinished.unrelated.full.fam'
     output:
-        outFolder + 'chrAll_QCFinished.unrelated.MAF' + MAF_threshold + ".bed"
+       bed = outFolder + 'chrAll_QCFinished.unrelated.MAF' + MAF_threshold + ".bed",
+       bim = outFolder + 'chrAll_QCFinished.unrelated.MAF' + MAF_threshold + ".bim",
+       fam = outFolder + 'chrAll_QCFinished.unrelated.MAF' + MAF_threshold + ".fam"
+    params:
+        prefix =  outFolder + 'chrAll_QCFinished.unrelated.MAF' + MAF_threshold
     shell:
         "ml plink2;"
-        "plink2 --bed {input.bed} --maf {MAF_threshold} --out {params.prefix} "
+        "plink2 --bed {input.bed} --bim {input.bim} --fam {input.fam} --maf {MAF_threshold} --out {params.prefix} --make-bed "
 
 rule convertPlinkToVCF:
     input:
-        outFolder + 'chrAll_QCFinished.{file}.bed'
+        bed = outFolder + 'chrAll_QCFinished.{file}.bed',
+        bim = outFolder + 'chrAll_QCFinished.{file}.bim',
+        fam = outFolder + 'chrAll_QCFinished.{file}.fam'
     output:
         vcf = outFolder + 'chrAll_QCFinished.{file}.vcf.gz',
-        stats = statsFolder + 'chrAll_QCFinished.{file}.vcf.gz'   
+        stats = statsFolder + 'chrAll_QCFinished.{file}.vcf.gz'
+    params:
+        prefix =  outFolder + 'chrAll_QCFinished.{file}'
     shell:
-        "ml plink2;ml bcftools/1.9"
-        "plink2 --bed {input} --recode vcf bgz --out {output.vcf}"
+        "ml plink2;ml bcftools/1.9;"
+        "plink2 --bed {input.bed} --bim {input.bim} --fam {input.fam} --recode vcf bgz --out {params.prefix};"
         "bcftools stats {output.vcf} > {output.stats}"
 
 # put all stats outputs together to get numbers of variants at each stage
 rule collateStats:
     input:
-        expand(  outFolder + 'chrAll_QCFinished.{file}.bed', file = ['unrelated.full', 'unrelated.MAF' + MAF_threshold ] )
+        expand(  outFolder + 'chrAll_QCFinished.{file}.vcf.gz', file = ['unrelated.full', 'unrelated.MAF' + MAF_threshold ] )
     output:
         outFolder + dataCode + "_stats_collated.txt"
     params:
