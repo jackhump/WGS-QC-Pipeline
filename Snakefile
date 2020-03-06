@@ -25,7 +25,6 @@ relatedFolder = dataCode + "/relatedness/"
 
 #Read in Options from config file
 splitFinalVCF = config['splitFinalVCF']
-filterBlacklist = config['filterBlacklist']
 blacklistFile = config['blacklistFile']
 removeSamples = config['removeSamples']
 liftOverhg19hg38 = config['liftOverhg19hg38']
