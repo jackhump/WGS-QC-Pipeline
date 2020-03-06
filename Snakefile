@@ -21,7 +21,7 @@ inFolder = dataCode + "/input/"
 outFolder = dataCode + "/output/"
 tempFolder = dataCode + "/temp/"
 statsFolder = dataCode + "/stats/"
-
+relatedFolder = dataCode + "/relatedness/"
 
 #Read in Options from config file
 splitFinalVCF = config['splitFinalVCF']
@@ -128,7 +128,8 @@ rule all:
             #expand(tempFolder + '{chr}_{chunk}_chunked.vcf.gz', chr = chrs, chunk = chunks)
             #expand(outFolder + 'chrAll_QCFinished.recode.vcf.gz', allele = alleles)
             final_output,
-            outFolder + 'chrAll_QCFinished.relatedness2',
+            outFolder + 'chrAll_QCFinished.bed',
+            outFolder + 'chrAll_QCFinished.con',
             outFolder + dataCode + "_stats_collated.txt",
             outFolder + 'chrAll_QCFinished.MAF_' + MAF_threshold + ".vcf.gz"
 
@@ -512,24 +513,73 @@ rule Filter9_Sample_Missingness:
         "else cp  {input.Filter8}  {output.Filter9}; fi;"
         "/hpc/packages/minerva-centos7/bcftools/1.9/bin/bcftools stats {output.Filter9} > {output.stats};"
 
-# Filter on Minor Allele Frequency (MAF)
+# make binary PLINK file
+rule plinkMakeBed:
+    input:
+        vcf = outFolder + 'chrAll_QCFinished.recode.vcf.gz'
+    output:
+        outFolder + 'chrAll_QCFinished.bed'
+    params:
+        stem = outFolder + 'chrAll_QCFinished',
+        #relatedness_filtered = tempFolder + 'chrAll_Filter9_relatedness2_filtered.txt'
+    shell:
+        "ml vcftools/0.1.15; ml bcftools/1.9;ml R/3.6.0;"
+        "ml plink2;"
+        "plink2 --vcf {input} --make-bed --out {params.stem}"
+ 
+rule KingRelatedness:
+    input:
+        bed =  outFolder + 'chrAll_QCFinished.bed'
+    output:
+        con = outFolder + 'chrAll_QCFinished.con',
+        samples_to_keep = relatedFolder + 'chrAll_QCFinishedunrelated.txt'
+    params:
+        prefix = relatedFolder + 'chrAll_QCFinished'
+    shell:
+        "ml king/2.1.6;"
+        "king -b {input.bed} --duplicate --prefix {params.prefix};"
+        "king -b {input.bed} --related --degree 3 --prefix {params.prefix};"
+        "king -b {input.bed} --unrelated --degree 3 --prefix {params.prefix};"
+
+# king outputs a set of individuals not related closer than third degree (a blood relative which includes the individual’s first-cousins, great-grandparents or great grandchildren)
+# remove those individuals and convert back to VCF
+rule removeRelatedSamples:
+    input:
+        bed = outFolder + 'chrAll_QCFinished.bed',
+        samples_to_keep = relatedFolder + 'chrAll_QCFinishedunrelated.txt'
+    output:
+        outFolder + 'chrAll_QCFinished.unrelated.bed'
+    params:
+        prefix =  outFolder + 'chrAll_QCFinished.unrelated.full.'
+    shell:
+        "ml plink2;"
+        "plink2 --bed {input.bed} --keep {input.samples_to_keep} --out {params.prefix} "
+
+# Then filter on Minor Allele Frequency (MAF)
 rule filterMAF:
     input:
-        Filter9 = outFolder + 'chrAll_QCFinished.recode.vcf.gz'
-        #outFolder + 'chrAll_QCFinished.recode.vcf.gz'
+       outFolder + 'chrAll_QCFinished.unrelated.full.bed' 
     output:
-        vcf = outFolder + 'chrAll_QCFinished.MAF_' + MAF_threshold + ".vcf.gz",
-        stats = statsFolder + 'chrAll_MAF_stats.txt'
+        outFolder + 'chrAll_QCFinished.unrelated.MAF' + MAF_threshold + ".bed"
     shell:
-        "ml vcftools/0.1.15; ml bcftools/1.9;"
-        "vcftools --gzvcf {input} --maf {MAF_threshold} --stdout --recode --recode-INFO-all | bgzip -c > {output.vcf} ;"
-        "tabix -f {output.vcf};"
+        "ml plink2;"
+        "plink2 --bed {input.bed} --maf {MAF_threshold} --out {params.prefix} "
+
+rule convertPlinkToVCF:
+    input:
+        outFolder + 'chrAll_QCFinished.{file}.bed'
+    output:
+        vcf = outFolder + 'chrAll_QCFinished.{file}.vcf.gz',
+        stats = statsFolder + 'chrAll_QCFinished.{file}.vcf.gz'   
+    shell:
+        "ml plink2;ml bcftools/1.9"
+        "plink2 --bed {input} --recode vcf bgz --out {output.vcf}"
         "bcftools stats {output.vcf} > {output.stats}"
 
 # put all stats outputs together to get numbers of variants at each stage
 rule collateStats:
     input:
-        outFolder + 'chrAll_QCFinished.MAF_' + MAF_threshold + ".vcf.gz"
+        expand(  outFolder + 'chrAll_QCFinished.{file}.bed', file = ['unrelated.full', 'unrelated.MAF' + MAF_threshold ] )
     output:
         outFolder + dataCode + "_stats_collated.txt"
     params:
@@ -538,33 +588,3 @@ rule collateStats:
         "ml R/3.6.0;"
         "Rscript {params.script} {statsFolder} {output}"
  
-#20) Splits the chromosomes again if specified in config.
-#rule Split_ChrAll:
-#    input:
-#        Final = outFolder + 'chrAll_QCFinished.recode.vcf.gz'
-#    output:
-#        Final_split = outFolder + '{chr}_QCFinished.recode.vcf.gz'
-#    params:
-#        outFolder = outFolder
-#    run:
-#        shell() # below creates a cyclic dependency - presumably due to using wildcards.chr
-        #shell("ml bcftools/1.9;tabix -f  -p vcf {input.Final};tabix {input.Final} {wildcards.chr} > {output.Final_split};")
-        #
-        #
-# 
-#19) Filter via Relatedness
-rule Check_Relatedness:
-    input:
-        vcf = outFolder + 'chrAll_QCFinished.recode.vcf.gz'
-    output:
-        outFolder + 'chrAll_QCFinished.relatedness2'
-    params:
-        RELATEDNESS_THRESH = RELATEDNESS_THRESH,
-        relatedness_file = outFolder + 'chrAll_QCFinished',
-        relatedness_filtered = tempFolder + 'chrAll_Filter9_relatedness2_filtered.txt'
-    shell:
-        "ml vcftools/0.1.15; ml bcftools/1.9;ml R/3.6.0;"
-
-        #create relatedness file
-        "vcftools --gzvcf {input.vcf} --relatedness2 --out {params.relatedness_file};"
-   

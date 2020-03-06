@@ -75,4 +75,4 @@ filter_dict <- c(
 summary$filter <- filter_dict[ match(summary$step, names(filter_dict) ) ]
 
 readr::write_tsv(summary, outFile)
-
+save.image(file = paste0(statsFolder, "all_stats.RData"))
