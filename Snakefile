@@ -1,9 +1,5 @@
 #0) Introductions
 
-
-# placeholder - figure out later
-sort_mem = '40G'
-
 #snakemake pipeline for QC of vcf files. Created first on 191115.
 # Sanan Venkatesh and Jack Humphrey
 print( " * WGS QC PIPELINE * ")
@@ -482,7 +478,7 @@ rule convertVCFtoPLINK:
         #relatedness_filtered = tempFolder + 'chrAll_Filter9_relatedness2_filtered.txt'
     shell:
         "ml plink2;"
-        "plink2 --vcf {input} --make-bed --out {params.prefix}"
+        "plink2 --vcf {input} --make-bed --out {params.prefix}  --output-chr chrM "
  
 #18) Filter via Sample level Missingness
 rule Filter9_Sample_Missingness:
@@ -500,7 +496,7 @@ rule Filter9_Sample_Missingness:
         prefix = tempFolder + 'chrAll_Filter9',
     shell:
         "ml plink2;"
-        "plink2  --bed {input.bed} --bim {input.bim} --fam {input.fam} --mind {MISS_THRESH_INDI} --out {params.prefix} --make-bed "
+        "plink2  --bed {input.bed} --bim {input.bim} --fam {input.fam} --mind {MISS_THRESH_INDI} --out {params.prefix} --make-bed --output-chr chrM "
 
 # Calculate Relatedness
 rule KingRelatedness:
@@ -532,7 +528,7 @@ rule removeRelatedSamples:
         prefix =  outFolder + 'chrAll_QCFinished_full'
     shell:
         "ml plink2;"
-        "plink2  --bed {input.bed} --bim {input.bim} --fam {input.fam} --keep {input.samples_to_keep} --out {params.prefix} --make-bed "
+        "plink2  --bed {input.bed} --bim {input.bim} --fam {input.fam} --keep {input.samples_to_keep} --out {params.prefix} --make-bed --output-chr chrM  "
 
 # Filter on Minor Allele Frequency (MAF)
 rule filterMAF:
@@ -548,7 +544,7 @@ rule filterMAF:
         prefix =  outFolder + 'chrAll_QCFinished_MAF' + MAF_threshold
     shell:
         "ml plink2;"
-        "plink2 --bed {input.bed} --bim {input.bim} --fam {input.fam} --maf {MAF_threshold} --out {params.prefix} --make-bed "
+        "plink2 --bed {input.bed} --bim {input.bim} --fam {input.fam} --maf {MAF_threshold} --out {params.prefix} --make-bed --output-chr chrM  "
 
 # Convert Full and MAF-filtered variant sets back to VCF
 rule convertPlinkToVCF:
@@ -563,7 +559,7 @@ rule convertPlinkToVCF:
         prefix =  outFolder + 'chrAll_QCFinished_{file}'
     shell:
         "ml plink2;ml bcftools/1.9;"
-        "plink2 --bed {input.bed} --bim {input.bim} --fam {input.fam} --recode vcf bgz --out {params.prefix};"
+        "plink2 --bed {input.bed} --bim {input.bim} --fam {input.fam} --recode vcf bgz --out {params.prefix} --output-chr chrM  ;"
         "tabix {output.vcf};"
         "bcftools stats {output.vcf} > {output.stats}"
 

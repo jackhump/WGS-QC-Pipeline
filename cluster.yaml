@@ -23,3 +23,23 @@ recombineChromosomes:
     cores: 4
     mem: 3750
     time: '180'
+KingRelatedness:
+    cores: 4
+    mem: 3750
+    time: '360'
+convertPlinkToVCF:
+    cores: 4
+    mem: 3750
+    time: '360'
+convertVCFtoPLINK:
+    cores: 4
+    mem: 3750
+    time: '360'
+removeRelatedSamples:
+    cores: 4
+    mem: 3750
+    time: '360'
+filterMAF:
+    cores: 4
+    mem: 3750
+    time: '360'
