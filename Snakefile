@@ -463,12 +463,27 @@ rule recombineChromosomes:
         "bcftools concat {input} | bgzip > {output.recombined};"
         "bcftools stats {output.recombined} > {output.stats};"
 
+# Set ID  to chr_pos - multiallelic SNPs have been removed already
+# also make sure reference allele is right way around
+# using hg38.fa
+rule setID:
+    input:
+        vcf = tempFolder + 'chrAll_Recombined.vcf.gz',
+        genome =  "data/hg38.fa"
+    output:
+        vcf = tempFolder + 'chrAll_Recombined.IDs.vcf.gz'
+    shell:
+        "ml bcftools/1.9;"
+        "bcftools norm -Ou --check-ref ws -f {input.genome} | "
+        "bcftools annotate --output {output} --set-id +'%CHROM\:%POS' {input}"
+
+
 ## STEP 4: QC ON ALL DATA TOGETHER IN PLINK
 
 # make binary PLINK file
 rule convertVCFtoPLINK:
     input:
-        vcf = tempFolder + 'chrAll_Recombined.vcf.gz'
+        vcf = tempFolder + 'chrAll_Recombined.IDs.vcf.gz'
     output:
         bed = tempFolder + 'chrAll_Recombined.bed',
         bim =  tempFolder + 'chrAll_Recombined.bim',

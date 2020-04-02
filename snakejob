@@ -75,5 +75,5 @@ snakemake -u cluster.yaml --cluster-sync "${bsub[*]}" \
   -pr \
   -s $snakefile --configfile $config \
   $dryrun \
-  -R --until filterRegionsAndSamples --forceall
+#  -R --until filterRegionsAndSamples --forceall
 
