@@ -123,7 +123,7 @@ rule all:
             #expand(tempFolder + '{chr}_{chunk}_chunked.vcf.gz', chr = chrs, chunk = chunks)
             #expand(outFolder + 'chrAll_QCFinished.recode.vcf.gz', allele = alleles)
             #final_output,
-            expand(  outFolder + 'chrAll_QCFinished_{file}.vcf.gz', file = ['full', 'MAF' + MAF_threshold ] ),
+            expand(  outFolder + 'chrAll_QCFinished_{file}.anno.vcf.gz', file = ['full', 'MAF' + MAF_threshold ] ),
             outFolder + "all_variant_stats_collated.txt"
 
 # for each file in the VCF file - symlink to input folder
@@ -577,6 +577,19 @@ rule convertPlinkToVCF:
         "plink2 --bed {input.bed} --bim {input.bim} --fam {input.fam} --recode vcf bgz --out {params.prefix} --output-chr chrM  ;"
         "tabix {output.vcf};"
         "bcftools stats {output.vcf} > {output.stats}"
+
+# add RS ID numbers to both VCFs
+rule annotateVCF:
+    input:
+        vcf = outFolder + 'chrAll_QCFinished_{file}.vcf.gz'
+    output:
+        vcf = outFolder + 'chrAll_QCFinished_{file}.anno.vcf.gz'
+    params:
+        dbsnp = "/sc/hydra/projects/ad-omics/data/references/hg38_reference/dbSNP/GCF_000001405.38.gz"
+    shell:
+        "ml bcftools/1.9;"
+        "bcftools annotate -o {output.vcf} -a {dbsnp} -c ID {input.vcf}"
+
 
 # put all stats outputs together to get numbers of variants at each stage
 rule collateStats:
