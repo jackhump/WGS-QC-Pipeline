@@ -464,7 +464,7 @@ rule recombineChromosomes:
         "bcftools stats {output.recombined} > {output.stats};"
 
 # Set ID  to chr_pos - multiallelic SNPs have been removed already
-# also make sure reference allele is right way around
+# also make sure reference allele is right way around - currently deprecated
 # using hg38.fa
 rule setID:
     input:
@@ -474,8 +474,8 @@ rule setID:
         vcf = tempFolder + 'chrAll_Recombined.IDs.vcf.gz'
     shell:
         "ml bcftools/1.9;"
-        "bcftools norm -Ou --check-ref ws -f {input.genome} | "
-        "bcftools annotate --output {output} --set-id +'%CHROM\:%POS' {input}"
+        #"bcftools norm -Ou --check-ref ws -f {input.genome} | "
+        "bcftools annotate -Oz --output {output.vcf} --set-id +'%CHROM\:%POS' {input.vcf}"
 
 
 ## STEP 4: QC ON ALL DATA TOGETHER IN PLINK
@@ -511,7 +511,7 @@ rule Filter9_Sample_Missingness:
         prefix = tempFolder + 'chrAll_Filter9',
     shell:
         "ml plink2;"
-        "plink2  --bed {input.bed} --bim {input.bim} --fam {input.fam} --mind {MISS_THRESH_INDI} --out {params.prefix} --make-bed --output-chr chrM "
+        "plink2  --bed {input.bed} --bim {input.bim} --fam {input.fam} --mind {MISS_THRESH_INDI} --out {params.prefix} --make-bed " # the following breaks KING --output-chr chrM "
 
 # Calculate Relatedness
 rule KingRelatedness:
@@ -543,7 +543,7 @@ rule removeRelatedSamples:
         prefix =  outFolder + 'chrAll_QCFinished_full'
     shell:
         "ml plink2;"
-        "plink2  --bed {input.bed} --bim {input.bim} --fam {input.fam} --keep {input.samples_to_keep} --out {params.prefix} --make-bed --output-chr chrM  "
+        "plink2  --bed {input.bed} --bim {input.bim} --fam {input.fam} --keep {input.samples_to_keep} --out {params.prefix} --make-bed " #--output-chr chrM  "
 
 # Filter on Minor Allele Frequency (MAF)
 rule filterMAF:
@@ -559,7 +559,7 @@ rule filterMAF:
         prefix =  outFolder + 'chrAll_QCFinished_MAF' + MAF_threshold
     shell:
         "ml plink2;"
-        "plink2 --bed {input.bed} --bim {input.bim} --fam {input.fam} --maf {MAF_threshold} --out {params.prefix} --make-bed --output-chr chrM  "
+        "plink2 --bed {input.bed} --bim {input.bim} --fam {input.fam} --maf {MAF_threshold} --out {params.prefix} --make-bed " #--output-chr chrM  "
 
 # Convert Full and MAF-filtered variant sets back to VCF
 rule convertPlinkToVCF:
