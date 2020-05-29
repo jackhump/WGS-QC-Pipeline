@@ -42,6 +42,13 @@ Variants *must* have been called using GATK. Check whether your data has VQSLOD,
 
 All config options are stored in `config.yaml`.
 
+dbSNP RS IDs are provided by ensembl. To generate the annotation VCF, run: 
+
+```
+cd data/; sh create_ensembl_vcf.sh
+```
+
+
 ## Outputs
 
 Using the `dataCode` parameter specified in the config.yaml, the following subfolders will be created:
@@ -56,8 +63,8 @@ The initial VCF files will be symlinked to `input/`. Any intermediary files will
 
 The output files will be:
 
-- **chrAll_QCFinished_full** - the full set of QC'd variants, in VCF and PLINK format
-- **chrAll_QCFinished_MAF<threshold>** - the minor allele frequency filtered set of QC'd variants, in VCF and PLINK format
+- **chrAll_QCFinished_full.anno** - the full set of QC'd variants, in VCF and PLINK format, annotated with dbSNP RS IDs
+- **chrAll_QCFinished_MAF<threshold>.anno** - the minor allele frequency filtered set of QC'd variants, in VCF and PLINK format, annotated with dbSNP RS IDs
 - **all_variant_stats_collated.txt** - the total number of variants retained at each step of the pipeline.
  
 

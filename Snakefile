@@ -585,10 +585,11 @@ rule annotateVCF:
     output:
         vcf = outFolder + 'chrAll_QCFinished_{file}.anno.vcf.gz'
     params:
-        dbsnp = "/sc/hydra/projects/ad-omics/data/references/hg38_reference/dbSNP/GCF_000001405.38.gz"
+        ensembl = "data/ensembl_v99_hg38.vcf.gz" 
     shell:
         "ml bcftools/1.9;"
-        "bcftools annotate -o {output.vcf} -a {dbsnp} -c ID {input.vcf}"
+        "bcftools annotate -Oz -o {output.vcf} -a {params.ensembl} -c ID {input.vcf};"
+        "tabix {output.vcf}"
 
 
 # put all stats outputs together to get numbers of variants at each stage
