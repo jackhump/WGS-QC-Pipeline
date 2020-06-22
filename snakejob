@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 # -m {cluster.partition}"
-
-# max concurrent jobs
-njobs=500
+source activate snakemake
 set -e
 
 if [ ! -d "cluster" ]; then
@@ -27,10 +25,10 @@ snakefile='Snakefile'
 dryrun=""
 
 print_usage() {
-  printf "Usage: ./snakejob [-h] [-c] config.yaml [-s] Snakefile\nOptions:\n\t-c config file\n\t-s Snakefile\n\t-n dry run mode\n"
+  printf "Usage: ./snakejob -c config.yaml -s Snakefile\nOptions:\n\t-c config file\n\t-s Snakefile\n\t-n dry run mode\n\t-m mode [eQTL/sQTL]\n\t-i interaction mode (requires interaction file in config.yaml)\n"
 }
 
-while getopts 'c:s:nh' flag; do
+while getopts 'c:s:m:inh' flag; do
   case "${flag}" in
     c) config="${OPTARG}" ;;
     s) snakefile="${OPTARG}" ;;
@@ -65,15 +63,13 @@ bsub=("bsub -K -J $jname:{rule}:{wildcards}"
 "-q {cluster.queue} "
 "-n {cluster.cores} -R \"span[hosts=1] select[mem>{cluster.mem}]"
 "rusage[mem={cluster.mem}]\" -W {cluster.time} -L /bin/bash"
-"-oo cluster/{rule}:{wildcards}.stdout"
-"-eo cluster/{rule}:{wildcards}.stderr < ")
+"-oo cluster/{rule}_{wildcards}.stdout"
+"-eo cluster/{rule}_{wildcards}.stderr < ")
 
 snakemake -u cluster.yaml --cluster-sync "${bsub[*]}" \
   --local-cores 4 --max-jobs-per-second 5 \
-  --jobs $njobs \
-  --restart-times 3 \
-  -pr \
+  --jobs 1000 \
+  --restart-times 0 \
   -s $snakefile --configfile $config \
+  --latency-wait 30 --rerun-incomplete \
   $dryrun \
-#  -R --until filterRegionsAndSamples --forceall
-

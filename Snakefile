@@ -77,7 +77,13 @@ alleles = ['Biallelic']
 #   refer throughout as {dataCode}{chr}.whatever
 vcf_file_list = config['vcfFileList']
 
-regex = re.compile("chr[0-9]+")
+# specify whether chr1 or 1
+chr_format = config["chr_format"]
+
+# assume all files have a "chrN" in the file name
+chr_string = "chr[0-9]+"
+
+regex = re.compile(chr_string)
 
 vcfFiles = [line.rstrip('\n') for line in open(vcf_file_list)]
 
@@ -96,7 +102,6 @@ print(" * Chunking: %s chunks selected" % NUM_CHUNK)
 
 # get out chrs
 chrs = [regex.search(vcf).group() for vcf in vcfFiles if regex.search(vcf) is not None] 
-
 # sort files by chr number 
 chr_n = [ int(i.split("chr")[1]) for i in chrs]
 chr_sorted = sorted(zip(chr_n,chrs, vcfFiles) )
@@ -116,6 +121,10 @@ else:
 
 MAF_threshold = str(config["MAF_threshold"])
 
+print("chrs used")
+print(chrs)
+
+
 rule all:
         input:
             #expand( inFolder + "{chr}_input.vcf.gz", chr = chrs)
@@ -129,74 +138,25 @@ rule all:
 # for each file in the VCF file - symlink to input folder
 rule symlinkVCFs:
     output:
-       expand( inFolder + "{chr}_input.vcf.gz", chr = chrs)
+        expand( inFolder + "{chr}_input.vcf.gz", chr = chrs),
+        expand( inFolder + "{chr}_input.vcf.gz.tbi", chr = chrs)
     run:
     # symlink files to named file to inFolder/newFiles[i]
         for i in range(len(vcfFiles)):
             os.symlink(os.path.abspath(vcfFiles[i]), symlinkedFiles[i], target_is_directory = False, dir_fd = None)
-
-if liftOverhg19hg38 is True:
-    print(" * VCF files will be lifted over from hg19 to hg38")
-    filterRegionsSamplesInput = inFolder + "{chr}_hg38_sorted.vcf.gz"
-else:
-    filterRegionsSamplesInput = inFolder + "{chr}_input.vcf.gz"
-
-# if VCFs are called with hg19
-# lift over to hg38
-rule liftOverVCFs:
-    input:
-        vcf = inFolder + "{chr}_input.vcf.gz", 
-        genome =  "data/hg38.fa"
-    output:
-        vcfgz_sorted = inFolder + "{chr}_hg38_sorted.vcf.gz"
-    params:
-        vcfgz = inFolder + "{chr}_hg38.vcf.gz",
-        memory = "12G",
-        vcf =  inFolder + "{chr}_hg38.vcf",
-        chain = "data/hg19ToHg38.over.chain.gz"
-    shell:
-        "ml crossmap/0.3.2; ml bcftools/1.9;"
-        "CrossMap.py vcf {params.chain} {input.vcf} {input.genome} {params.vcf} ;"
-        "bgzip {params.vcf} ;"
-        "bcftools sort {params.vcfgz} -Oz -m {params.memory} > {output.vcfgz_sorted};"
-        "tabix {output.vcfgz_sorted};"
-        "rm {params.vcfgz}"
+            os.symlink(os.path.abspath(vcfFiles[i] + ".tbi"), symlinkedFiles[i] + ".tbi", target_is_directory = False, dir_fd = None)
 
 
-
-if removeSamples is not False:
-    print(" * Removing samples from file %s " % removeSamples)
-    sample_filter_string = "--remove " + removeSamples
-else:
-    sample_filter_string = ""
-
-# Filter SNPs based on Blacklist, Samples based on removeSamples list
-rule filterRegionsAndSamples:
-    input:
-        vcfgz = filterRegionsSamplesInput,
-        blacklist_file = blacklistFile
-    output:
-        blacklist_filtered = tempFolder + '{chr}_filtered.vcf.gz',
-        stats1 = statsFolder + '{chr}_full_Initial_stats.txt',
-        stats2 = statsFolder + '{chr}_full_BlacklistFiltered_stats.txt'
-    params:
-        sample_filter_string = sample_filter_string
-    shell:
-        "ml vcftools/0.1.15;"
-        "ml bcftools/1.9;"
-        "tabix -f {input.vcfgz};"
-        "bcftools stats {input.vcfgz} > {output.stats1};"
-        "vcftools --gzvcf {input.vcfgz} {params.sample_filter_string} --exclude-positions {input.blacklist_file} --stdout --recode --recode-INFO-all | bgzip -c > {output.blacklist_filtered};"
-        "tabix -f  {output.blacklist_filtered};"
-        "bcftools stats {output.blacklist_filtered} > {output.stats2};"
-
+# CHUNKING
 
 # chunk number set by user
 # read in chrLengths
 # for each chr and chunk - calculate
 rule chunk:
     input:
-        vcfgz = tempFolder + '{chr}_filtered.vcf.gz',
+        vcfgz = inFolder + "{chr}_input.vcf.gz",
+        tbi = inFolder + "{chr}_input.vcf.gz.tbi",
+        #vcfgz = tempFolder + '{chr}_filtered.vcf.gz',
         chrLengths = chromosomeLengths
     output:
         chunked = tempFolder + '{chr}_{chunk}_chunked.vcf.gz',
@@ -213,6 +173,9 @@ rule chunk:
         chrSizes = pd.read_csv(chromosomeLengths, sep = "\t", index_col = 0, header = None)
         chrLen = chrSizes.loc[chromosome]
 
+        if chr_format == "1":
+            chromosome = chromosome.replace("chr", "")
+
         #calculates the genetic loci for this chunk from the chromosome size and chunk number
         start = (int(chunkNum)-1)*math.ceil(chrLen/NUM_CHUNK)+1
         end = int(chunkNum)*math.ceil(chrLen/NUM_CHUNK)
@@ -225,10 +188,68 @@ rule chunk:
 
 ## STEP 2 - PER-CHUNK FILTERS
    
+
+## LIFT OVER to HG38 if necessary
+if liftOverhg19hg38 is True:
+    print(" * VCF files will be lifted over from hg19 to hg38")
+    filterRegionsSamplesInput = tempFolder + "{chr}_{chunk}_hg38_sorted.vcf.gz"
+else:
+    filterRegionsSamplesInput = tempFolder + "{chr}_{chunk}_chunked.vcf.gz"
+
+# if VCFs are called with hg19
+# lift over to hg38
+rule liftOverVCFs:
+    input:
+        vcf = tempFolder + '{chr}_{chunk}_chunked.vcf.gz', 
+        genome =  "data/hg38.fa"
+    output:
+        vcfgz_sorted = tempFolder + "{chr}_{chunk}_hg38_sorted.vcf.gz"
+    params:
+        vcfgz = tempFolder + "{chr}_{chunk}_hg38.vcf.gz",
+        memory = "45G",
+        vcf =  tempFolder + "{chr}_{chunk}_hg38.vcf",
+        chain = "data/hg19ToHg38.over.chain.gz"
+    shell:
+        "ml crossmap/0.3.2; ml bcftools/1.9;"
+        "CrossMap.py vcf {params.chain} {input.vcf} {input.genome} {params.vcf} ;"
+        "bgzip {params.vcf} ;"
+        "bcftools sort {params.vcfgz} -Oz --max-mem {params.memory}  > {output.vcfgz_sorted};"
+        "tabix {params.vcfgz};"
+        #"tabix {output.vcfgz_sorted};"
+        #"rm {params.vcfgz}"
+
+
+if removeSamples is not False:
+    print(" * Removing samples from file %s " % removeSamples)
+    sample_filter_string = "--remove " + removeSamples
+else:
+    sample_filter_string = ""
+
+# Filter SNPs based on Blacklist, Samples based on removeSamples list
+rule filterRegionsAndSamples:
+    input:
+        vcfgz = filterRegionsSamplesInput,
+        blacklist_file = blacklistFile
+    output:
+        blacklist_filtered = tempFolder + '{chr}_{chunk}_filtered.vcf.gz',
+        stats1 = statsFolder + '{chr}_{chunk}_Initial_stats.txt',
+        stats2 = statsFolder + '{chr}_{chunk}__BlacklistFiltered_stats.txt'
+    params:
+        sample_filter_string = sample_filter_string
+    shell:
+        "ml vcftools/0.1.15;"
+        "ml bcftools/1.9;"
+        "tabix -f {input.vcfgz};"
+        "bcftools stats {input.vcfgz} > {output.stats1};"
+        "vcftools --gzvcf {input.vcfgz} {params.sample_filter_string} --exclude-positions {input.blacklist_file} --stdout --recode --recode-INFO-all | bgzip -c > {output.blacklist_filtered};"
+        "tabix -f  {output.blacklist_filtered};"
+        "bcftools stats {output.blacklist_filtered} > {output.stats2};"
+
 #6) Separate biallelics and triallelics for later on
 rule Filter0_separateBiallelics:
     input:
-        chunked = tempFolder + '{chr}_{chunk}_chunked.vcf.gz'
+        chunked = tempFolder + '{chr}_{chunk}_filtered.vcf.gz'
+        #chunked = tempFolder + '{chr}_{chunk}_chunked.vcf.gz'
     output:
         biallelic_Filter0 = tempFolder + '{chr}' + '_{chunk}_Biallelic.recode.vcf.gz',
         stats = statsFolder + '{chr}' + '_{chunk}_separateBiallelic.stats.txt'
