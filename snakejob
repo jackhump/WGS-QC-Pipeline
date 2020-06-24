@@ -69,7 +69,7 @@ bsub=("bsub -K -J $jname:{rule}:{wildcards}"
 snakemake -u cluster.yaml --cluster-sync "${bsub[*]}" \
   --local-cores 4 --max-jobs-per-second 5 \
   --jobs 1000 \
-  --restart-times 0 \
+  --restart-times 3 \
   -s $snakefile --configfile $config \
   --latency-wait 30 --rerun-incomplete \
   $dryrun \

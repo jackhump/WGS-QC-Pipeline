@@ -21,10 +21,21 @@ relatedFolder = dataCode + "/relatedness/"
 
 #Read in Options from config file
 splitFinalVCF = config['splitFinalVCF']
-blacklistFile = config['blacklistFile']
+#blacklistFile = config['blacklistFile']
 removeSamples = config['removeSamples']
 liftOverhg19hg38 = config['liftOverhg19hg38']
 
+genomeBuild = config['genome_build']
+print(" * Genome build used is: ", genomeBuild)
+if genomeBuild == "hg38":
+    genomeFASTA = "data/hg38.fa"
+    blacklistFile = "data/hg38-blacklist.v2.bed.gz"
+
+if genomeBuild == "hg19":
+    genomeFASTA = "data/hg19.fa"
+    blacklistFile = "data/hg19-blacklist.v2.bed.gz"
+
+print(" * using blacklist:" , blacklistFile)
 #Read in Chunking Metrics from config file
 NUM_CHUNK = config['NUM_CHUNK']
 chunks = ['chunk'+str(x) for x in range(1,NUM_CHUNK+1)]
@@ -120,10 +131,6 @@ else:
     final_output = expand(outFolder + 'chrAll_QCFinished.vcf.gz' )
 
 MAF_threshold = str(config["MAF_threshold"])
-
-print("chrs used")
-print(chrs)
-
 
 rule all:
         input:
@@ -330,6 +337,7 @@ rule Filter3_GQ:
     shell:
         "ml vcflib/v1.0.0-rc0; ml bcftools/1.9;"
         "tabix -f  -p vcf {input.Filter2};"
+        " if [ $(bcftools view -H {input.Filter2} | wc -l) == 0 ]; then cp {input.Filter2} {output.Filter3}; exit 0; fi"
         "vcffilter -g \"GQ > {params.GQ_thresh}\" {input.Filter2} | bgzip -c > {output.Filter3};"
         "bcftools stats {output.Filter3} > {output.stats};"
 
@@ -487,10 +495,11 @@ rule recombineChromosomes:
 # Set ID  to chr_pos - multiallelic SNPs have been removed already
 # also make sure reference allele is right way around - currently deprecated
 # using hg38.fa
+# unless genome build is hg19
 rule setID:
     input:
         vcf = tempFolder + 'chrAll_Recombined.vcf.gz',
-        genome =  "data/hg38.fa"
+        genome =  genomeFASTA
     output:
         vcf = tempFolder + 'chrAll_Recombined.IDs.vcf.gz'
     shell:
