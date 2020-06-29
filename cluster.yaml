@@ -16,15 +16,15 @@ liftOverVCFs:
     mem: 3000
     time: '360'
 Biallelic_Combine_Indels_and_SNPs:
-    cores: 4
+    cores: 16
     mem: 3750
     time: '180'
 recombineChunks:
-    cores: 4
+    cores: 8
     mem: 3750
     time: '180'
 recombineChromosomes:
-    cores: 4
+    cores: 8
     mem: 3750
     time: '180'
 KingRelatedness:
