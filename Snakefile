@@ -7,8 +7,9 @@ print( " authors: Jack Humphrey and Sanan Venkatesh")
 print( " inspired by Adelson et al, 2019")
 
 #1) Set up Variables from Config files
+R_VERSION = "R/3.6.2"
 # should be set to some default conda environment that contains snakemake
-#shell.prefix('source differential-pipeline;')
+#shell.prefix('ml anaconda3/latest; conda activate WGS-QC-pipeline;')
 
 #Read in File Reading options from config file
 dataCode = config['dataCode']
@@ -135,12 +136,30 @@ MAF_threshold = str(config["MAF_threshold"])
 rule all:
         input:
             #expand( inFolder + "{chr}_input.vcf.gz", chr = chrs)
-            #expand(tempFolder + '{chr}_filtered.vcf.gz', chr = chrs)
-            #expand(tempFolder + '{chr}_{chunk}_chunked.vcf.gz', chr = chrs, chunk = chunks)
-            #expand(outFolder + 'chrAll_QCFinished.recode.vcf.gz', allele = alleles)
-            #final_output,
-            expand(  outFolder + 'chrAll_QCFinished_{file}.anno.vcf.gz', file = ['full', 'MAF' + MAF_threshold ] ),
-            outFolder + "all_variant_stats_collated.txt"
+            #expand(tempFolder + '{chr}_{chunk}_chunked.vcf.gz', chr = chrs, chunk = chunks) # rule: chunk
+            #expand(tempFolder + '{chr}_{chunk}_filtered.vcf.gz', chr = chrs, chunk = chunks) # rule: filterRegionsAndSamples
+            #expand(tempFolder + '{chr}_{chunk}_Biallelic.recode.vcf.gz', chr = chrs, chunk = chunks) # rule: Filter0_separateBiallelics
+            #expand(tempFolder + '{chr}_{chunk}_Filter1.recode.vcf.gz', chr = chrs, chunk = chunks) # rule: Filter1_GATK_PASS
+            #expand(tempFolder + '{chr}_{chunk}_Filter2.recode.vcf.gz', chr = chrs, chunk = chunks) # rule: Filter2_GDP
+            #expand(tempFolder + '{chr}_{chunk}_Filter3.recode.vcf.gz', chr = chrs, chunk = chunks) # rule: Filter3_GQ
+            #expand(tempFolder + '{chr}_{chunk}_Filter4.recode.vcf.gz', chr = chrs, chunk = chunks) # rule: Filter4_SNP_Missingess
+            #expand(tempFolder + '{chr}_{chunk}_Filter5.recode.vcf.gz', chr = chrs, chunk = chunks) # rule: Filter5_ODP
+            #expand(tempFolder + '{chr}_{chunk}_Filter6.recode.vcf.gz', chr = chrs, chunk = chunks) # rule: Filter6_MQ
+            #expand(tempFolder + '{chr}_{chunk}_Filter6_SNPs.recode.vcf.gz', chr = chrs, chunk = chunks) # rule: Biallelic_Separate_Indels_and_SNPs
+            #expand(tempFolder + '{chr}_{chunk}_Filter7_SNPs.recode.vcf.gz', chr = chrs, chunk = chunks) # rule: Biallelic_SNPs_Filter7_VQSLOD
+            #expand(tempFolder + '{chr}_{chunk}_CombineSNPsIndels.recode.vcf.gz', chr = chrs, chunk = chunks) # rule: Biallelic_Combine_Indels_and_SNPs
+            #expand(tempFolder + '{chr}_{chunk}_Filter8.recode.vcf.gz', chr = chrs, chunk = chunks) # rule: Filter8_Inbreeding_Coef
+            #expand(tempFolder + '{chr}_Filter8.recode.vcf.gz', chr = chrs) # rule: recombineChunks
+            #expand(tempFolder + 'chrAll_Recombined.vcf.gz') # rule: recombineChromosomes
+            #expand(tempFolder + 'chrAll_Recombined.IDs.vcf.gz') # rule: setID
+            #expand(tempFolder + 'chrAll_Recombined.bed') # rule: convertVCFtoPLINK
+            #expand(tempFolder + 'chrAll_Filter9.bed') # rule: Filter9_Sample_Missingness
+            #expand(relatedFolder + 'chrAll_QCFinishedunrelated.txt') # rule: KingRelatedness
+            #expand(outFolder + 'chrAll_QCFinished_full.bed') # rule: removeRelatedSamples
+            #expand(outFolder + 'chrAll_QCFinished_MAF' + MAF_threshold + ".bed") # rule: filterMAF
+            #expand(outFolder + 'chrAll_QCFinished_{file}.vcf.gz', file = ['full', 'MAF' + MAF_threshold ]) # rule: convertPlinkToVCF
+            #expand(outFolder + 'chrAll_QCFinished_{file}.anno.vcf.gz', file = ['full', 'MAF' + MAF_threshold ]) # rule: annotateVCF
+            outFolder + "all_variant_stats_collated.txt" # rule: collateStats
 
 # for each file in the VCF file - symlink to input folder
 rule symlinkVCFs:
@@ -153,7 +172,6 @@ rule symlinkVCFs:
             os.symlink(os.path.abspath(vcfFiles[i]), symlinkedFiles[i], target_is_directory = False, dir_fd = None)
             os.symlink(os.path.abspath(vcfFiles[i] + ".tbi"), symlinkedFiles[i] + ".tbi", target_is_directory = False, dir_fd = None)
 
-
 # CHUNKING
 
 # chunk number set by user
@@ -161,12 +179,12 @@ rule symlinkVCFs:
 # for each chr and chunk - calculate
 rule chunk:
     input:
-        vcfgz = inFolder + "{chr}_input.vcf.gz",
-        tbi = inFolder + "{chr}_input.vcf.gz.tbi",
+        vcfgz = ancient(inFolder + "{chr}_input.vcf.gz"),
+        tbi = ancient(inFolder + "{chr}_input.vcf.gz.tbi"),
         #vcfgz = tempFolder + '{chr}_filtered.vcf.gz',
-        chrLengths = chromosomeLengths
+        chrLengths = ancient(chromosomeLengths)
     output:
-        chunked = tempFolder + '{chr}_{chunk}_chunked.vcf.gz',
+        chunked = temp(tempFolder + '{chr}_{chunk}_chunked.vcf.gz'),
         stats_output = statsFolder + '{chr}_{chunk}_Chunk_stats.txt'
     params:
         chunkString = ''
@@ -190,11 +208,9 @@ rule chunk:
         #Uses tabix -f  to split vcf file to extract only this chunks portion of the chromosome
         params.chunkString = chromosome + ':' + str(start) + '-' + str(end)
 
-        shell("ml bcftools/1.9; tabix -f  -h {input.vcfgz} {params.chunkString} | bgzip -c > {output.chunked}; bcftools stats {output.chunked} > {output.stats_output};")
-
+        shell("ml bcftools/1.9; tabix -f -h {input.vcfgz} {params.chunkString} | bgzip -c > {output.chunked}; bcftools stats {output.chunked} > {output.stats_output};")
 
 ## STEP 2 - PER-CHUNK FILTERS
-   
 
 ## LIFT OVER to HG38 if necessary
 if liftOverhg19hg38 is True:
@@ -210,7 +226,7 @@ rule liftOverVCFs:
         vcf = tempFolder + '{chr}_{chunk}_chunked.vcf.gz', 
         genome =  "data/hg38.fa"
     output:
-        vcfgz_sorted = tempFolder + "{chr}_{chunk}_hg38_sorted.vcf.gz"
+        vcfgz_sorted = temp(tempFolder + "{chr}_{chunk}_hg38_sorted.vcf.gz")
     params:
         vcfgz = tempFolder + "{chr}_{chunk}_hg38.vcf.gz",
         memory = "45G",
@@ -235,10 +251,10 @@ else:
 # Filter SNPs based on Blacklist, Samples based on removeSamples list
 rule filterRegionsAndSamples:
     input:
-        vcfgz = filterRegionsSamplesInput,
+        vcfgz = ancient(filterRegionsSamplesInput),
         blacklist_file = blacklistFile
     output:
-        blacklist_filtered = tempFolder + '{chr}_{chunk}_filtered.vcf.gz',
+        blacklist_filtered = temp(tempFolder + '{chr}_{chunk}_filtered.vcf.gz'),
         stats1 = statsFolder + '{chr}_{chunk}_Initial_stats.txt',
         stats2 = statsFolder + '{chr}_{chunk}__BlacklistFiltered_stats.txt'
     params:
@@ -258,17 +274,17 @@ rule Filter0_separateBiallelics:
         chunked = tempFolder + '{chr}_{chunk}_filtered.vcf.gz'
         #chunked = tempFolder + '{chr}_{chunk}_chunked.vcf.gz'
     output:
-        biallelic_vcf = tempFolder + '{chr}' + '_{chunk}_Biallelic.recode.vcf.gz',
+        biallelic_vcf = temp(tempFolder + '{chr}' + '_{chunk}_Biallelic.recode.vcf.gz'),
         stats = statsFolder + '{chr}' + '_{chunk}_separateBiallelic.stats.txt'
     #group: "per_chunk_filter"
     shell:
         "ml vcftools/0.1.15;"
         "ml bcftools/1.9;"
-        "n_var=$(bcftools view -H {input.chunked} | wc -l);if [[ $n_var == 0 ]];then echo 'chunk is empty'; cp {input.chunked} {output.biallelic_Filter0}; else "
-        "vcftools --gzvcf {input.chunked} --min-alleles 2 --max-alleles 2 --recode --recode-INFO-all --stdout | bgzip -c > {output.biallelic_Filter0};"
+        "n_var=$(bcftools view -H {input.chunked} | wc -l);if [[ $n_var == 0 ]];then echo 'chunk is empty'; cp {input.chunked} {output.biallelic_vcf}; else "
+        "vcftools --gzvcf {input.chunked} --min-alleles 2 --max-alleles 2 --recode --recode-INFO-all --stdout | bgzip -c > {output.biallelic_vcf};"
         "fi;"
-        #"bcftools view --threads 5 -m2 -M2 -v snps -Oz {input.vcfgz} > {output.biallelic_Filter0};" #may speed up QC pipeline slightly. Haven't tested
-        "bcftools stats {output.biallelic_Filter0} > {output.stats};"
+        #"bcftools view --threads 5 -m2 -M2 -v snps -Oz {input.vcfgz} > {output.biallelic_vcf};" #may speed up QC pipeline slightly. Haven't tested
+        "bcftools stats {output.biallelic_vcf} > {output.stats};"
 
 #Removed triallelic steps. Stretch Goal
 # rule Filter0_separateTriallelics:
@@ -295,7 +311,7 @@ rule Filter1_GATK_PASS:
     input:
         vcf = tempFolder + '{chr}_{chunk}_Biallelic.recode.vcf.gz'
     output:
-        vcf = tempFolder + '{chr}_{chunk}_Filter1.recode.vcf.gz',
+        vcf = temp(tempFolder + '{chr}_{chunk}_Filter1.recode.vcf.gz'),
         stats = statsFolder + '{chr}_{chunk}_Filter1_stats.txt'
     #group: "per_chunk_filter"
     shell:
@@ -311,7 +327,7 @@ rule Filter2_GDP:
     input:
         vcf = tempFolder + '{chr}_{chunk}_Filter1.recode.vcf.gz'
     output:
-        vcf = tempFolder + '{chr}_{chunk}_Filter2.recode.vcf.gz',
+        vcf = temp(tempFolder + '{chr}_{chunk}_Filter2.recode.vcf.gz'),
         stats = statsFolder + '{chr}_{chunk}_Filter2_stats.txt'
     params:
         GDP_thresh = GDP
@@ -325,13 +341,12 @@ rule Filter2_GDP:
         "vcffilter -g \"DP > {params.GDP_thresh}\" {input.vcf} | bgzip -c > {output.vcf};"
         "bcftools stats {output.vcf} > {output.stats};"
 
-
 #9) Filter for Genome Quality (GQ)
 rule Filter3_GQ:
     input:
         vcf = tempFolder + '{chr}_{chunk}_Filter2.recode.vcf.gz'
     output:
-        vcf = tempFolder + '{chr}_{chunk}_Filter3.recode.vcf.gz',
+        vcf = temp(tempFolder + '{chr}_{chunk}_Filter3.recode.vcf.gz'),
         stats = statsFolder + '{chr}_{chunk}_Filter3_stats.txt'
     params:
         GQ_thresh = GQ
@@ -348,7 +363,7 @@ rule Filter4_SNP_Missingess:
     input:
         vcf = tempFolder + '{chr}_{chunk}_Filter3.recode.vcf.gz'
     output:
-        vcf = tempFolder + '{chr}_{chunk}_Filter4.recode.vcf.gz',
+        vcf = temp(tempFolder + '{chr}_{chunk}_Filter4.recode.vcf.gz'),
         stats = statsFolder + '{chr}_{chunk}_Filter4_stats.txt'
     params:
         MISS_THRESH_SNP = MISS_THRESH_SNP
@@ -364,7 +379,7 @@ rule Filter5_ODP:
     input:
         vcf = tempFolder + '{chr}_{chunk}_Filter4.recode.vcf.gz'
     output:
-        vcf = tempFolder + '{chr}_{chunk}_Filter5.recode.vcf.gz',
+        vcf = temp(tempFolder + '{chr}_{chunk}_Filter5.recode.vcf.gz'),
         stats = statsFolder + '{chr}_{chunk}_Filter5_stats.txt'
     params:
         ODP_thresh = ODP
@@ -381,7 +396,7 @@ rule Filter6_MQ:
     input:
         vcf = tempFolder + '{chr}_{chunk}_Filter5.recode.vcf.gz'
     output:
-        vcf = tempFolder + '{chr}_{chunk}_Filter6.recode.vcf.gz',
+        vcf = temp(tempFolder + '{chr}_{chunk}_Filter6.recode.vcf.gz'),
         stats = statsFolder + '{chr}_{chunk}_Filter6_stats.txt'
     params:
         MQ_MAX_THRESH = MQ_MAX,
@@ -400,9 +415,9 @@ rule Biallelic_Separate_Indels_and_SNPs:
     input:
         vcf = tempFolder + '{chr}_{chunk}_Filter6.recode.vcf.gz'
     output:
-        vcf_SNPs = tempFolder + '{chr}_{chunk}_Filter6_SNPs.recode.vcf.gz',
+        vcf_SNPs = temp(tempFolder + '{chr}_{chunk}_Filter6_SNPs.recode.vcf.gz'),
         vcf_SNPs_stats = statsFolder + '{chr}_{chunk}_Filter6_SNPs_stats.txt',
-        vcf_Indels = tempFolder + '{chr}_{chunk}_Filter6_Indels.recode.vcf.gz',
+        vcf_Indels = temp(tempFolder + '{chr}_{chunk}_Filter6_Indels.recode.vcf.gz'),
         vcf_Indels_stats = statsFolder + '{chr}_{chunk}_Filter6_Indels_stats.txt'
     #group: "per_chunk_filter"
     shell:
@@ -414,13 +429,12 @@ rule Biallelic_Separate_Indels_and_SNPs:
         "bcftools stats {output.vcf_SNPs} > {output.vcf_SNPs_stats};"
         "bcftools stats {output.vcf_Indels} > {output.vcf_Indels_stats};"
 
-
 #14) Filter Biallelic SNPs for VQSLOD
 rule Biallelic_SNPs_Filter7_VQSLOD:
     input:
         vcf = tempFolder + '{chr}_{chunk}_Filter6_SNPs.recode.vcf.gz'
     output:
-        vcf = tempFolder + '{chr}_{chunk}_Filter7_SNPs.recode.vcf.gz',
+        vcf = temp(tempFolder + '{chr}_{chunk}_Filter7_SNPs.recode.vcf.gz'),
         stats = statsFolder + '{chr}_{chunk}_Filter7_SNPs_stats.txt'
     params:
         VQSLOD_thresh = VQSLOD
@@ -438,7 +452,7 @@ rule Biallelic_Combine_Indels_and_SNPs:
         SNPs = tempFolder + '{chr}_{chunk}_Filter7_SNPs.recode.vcf.gz',
         Indels = tempFolder + '{chr}_{chunk}_Filter6_Indels.recode.vcf.gz'
     output:
-        vcf = tempFolder + '{chr}_{chunk}_CombineSNPsIndels.recode.vcf.gz',
+        vcf = temp(tempFolder + '{chr}_{chunk}_CombineSNPsIndels.recode.vcf.gz'),
         stats = statsFolder + '{chr}_{chunk}_CombineSNPsIndels_stats.txt'
     #group: "per_chunk_filter"
     shell:
@@ -452,14 +466,14 @@ rule Filter8_Inbreeding_Coef:
     input:
         vcf = tempFolder + '{chr}_{chunk}_CombineSNPsIndels.recode.vcf.gz'
     output:
-        vcf = tempFolder + '{chr}_{chunk}_Filter8.recode.vcf.gz',
+        vcf = temp(tempFolder + '{chr}_{chunk}_Filter8.recode.vcf.gz'),
         stats = statsFolder + '{chr}_{chunk}_Filter8_stats.txt'
     params:
         INBREEDING_COEF = INBREEDING_COEF
     #group: "per_chunk_filter"
     run:
         shell("ml vcflib/v1.0.0-rc0; ml bcftools/1.9;tabix -f -p vcf {input.vcf};")
-        cmd = "ml bcftools/1.9;bcftools view -H " + input.vcf + "| wc -l"
+        cmd = "ml bcftools/1.9; bcftools view -H " + input.vcf + "| wc -l"
         nLine = subprocess.check_output(cmd, shell = True)
         nLine = int(nLine.decode("utf-8").strip() )
         if nLine == 0:
@@ -489,7 +503,7 @@ rule recombineChunks:
     output:
         tempFolder + '{chr}_Filter8.recode.vcf.gz'
     shell:
-        "ml vcftools/0.1.15;ml vcflib/v1.0.0-rc0; ml bcftools/1.9;"
+        "ml vcftools/0.1.15; ml vcflib/v1.0.0-rc0; ml bcftools/1.9;"
         "bcftools concat {input} | bgzip -c > {output}"
 
 rule recombineChromosomes:
@@ -517,7 +531,6 @@ rule setID:
         "ml bcftools/1.9;"
         #"bcftools norm -Ou --check-ref ws -f {input.genome} | "
         "bcftools annotate -Oz --output {output.vcf} --set-id +'%CHROM\:%POS' {input.vcf}"
-
 
 ## STEP 4: QC ON ALL DATA TOGETHER IN PLINK
 
@@ -614,7 +627,7 @@ rule convertPlinkToVCF:
     params:
         prefix =  outFolder + 'chrAll_QCFinished_{file}'
     shell:
-        "ml plink2;ml bcftools/1.9;"
+        "ml plink2; ml bcftools/1.9;"
         "plink2 --bed {input.bed} --bim {input.bim} --fam {input.fam} --recode vcf bgz --out {params.prefix} --output-chr chrM  ;"
         "tabix {output.vcf};"
         "bcftools stats {output.vcf} > {output.stats}"
@@ -642,5 +655,5 @@ rule collateStats:
     params:
         script = "scripts/collate_all_stats.R"
     shell:
-        "ml R/3.6.0;"
+        "ml {R_VERSION};"
         "Rscript {params.script} {statsFolder} {output}" 

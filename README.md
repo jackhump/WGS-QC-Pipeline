@@ -31,7 +31,6 @@ conda install snakemake
 conda activate WGS-QC-pipeline
 ```
 
-
 ## Inputs
 
 A set of jointly called VCFs from GATK, split by chromosome. Each file must have "chr1","chr2", etc in the file name.
@@ -47,7 +46,6 @@ dbSNP RS IDs are provided by ensembl. To generate the annotation VCF, run:
 ```
 cd data/; sh create_ensembl_vcf.sh
 ```
-
 
 ## Outputs
 
@@ -67,12 +65,9 @@ The output files will be:
 - **chrAll_QCFinished_MAF<threshold>.anno** - the minor allele frequency filtered set of QC'd variants, in VCF and PLINK format, annotated with dbSNP RS IDs
 - **all_variant_stats_collated.txt** - the total number of variants retained at each step of the pipeline.
  
-
 ## Specifying samples to remove
 
 VCF IDs for samples to be removed from the analysis should be in a text file. The relative path to this file should be specified in the config.yaml under the key `removeSamples`
-
-
 
 # Parallel execution on MSSM HPC
 
@@ -105,19 +100,23 @@ Path to file containing VCF sample IDs of any samples to be removed. Otherwise s
 **blacklist_file**: _FILE_ 
 
 Path to blacklist file. hg38 blacklist is contained within `/data` folder. 
-Current blacklist taken from https://github.com/Boyle-Lab/Blacklist/blob/master/lists/hg38-blacklist.v2.bed.gz; ref: https://www.nature.com/articles/s41598-019-45839-z
+Current blacklist taken from https://github.com/Boyle-Lab/Blacklist/blob/master/lists/hg38-blacklist.v2.bed.gz; 
+ref: https://www.nature.com/articles/s41598-019-45839-z
 
 **liftOverhg19hg38**: _True,False_
 
-whether to lift over the variants from hg19 to hg38. This requires the human genome fasta file `hg38.fa` to be present in `data/`. Symlink this from wherever you keep a copy.
+whether to lift over the variants from hg19 to hg38. This requires the human genome fasta file `hg38.fa` to be present in `data/`. 
+Symlink this from wherever you keep a copy.
 
 **NUM_CHUNK**: _number_ 
 
-How many pieces to break up the chromosome. This allows for parallel execution. Chunk numbers of 4 have been tested and work without error. Larger numbers may cause errors due to the creation of empty chunks 
+How many pieces to break up the chromosome. This allows for parallel execution. Chunk numbers of 4 have been tested and work without error. 
+Larger numbers may cause errors due to the creation of empty chunks 
 
 **chromosomeLengths**: _FILE_ 
 
-Text file of chromosome lengths. Used for chunking. hg38 chromosome sizes is contained within `data` folder. Sizes were taken from IGV at https://github.com/igvteam/igv/blob/master/genomes/sizes/hg38.chrom.sizes
+Text file of chromosome lengths. Used for chunking. hg38 chromosome sizes is contained within `data` folder. 
+Sizes were taken from IGV at https://github.com/igvteam/igv/blob/master/genomes/sizes/hg38.chrom.sizes
 
 **splitFinalVCF**: _True,False_ 
 
@@ -131,7 +130,8 @@ Threshold of missingness of a SNP, above which we exlude SNP from analysis. Defa
 
 **ODP**: _number_
 
-Overall Read Depth. Default is 5000. Number is dependent on total number of samples in cohort multiplied by the coverage. See below for more details.
+Overall Read Depth. Default is 5000. Number is dependent on total number of samples in cohort multiplied by the coverage. 
+See below for more details.
 
 **MQ_MIN**: _number_
 
@@ -143,7 +143,7 @@ Mapping Quality upper threshold. Default is 61.25
 
 **VQSLOD**: _number_ 
 
-Variant quality log-odds score from GATK. Applied only to SNPs. Default is 7.81
+Variant quality log-odds score from GATK. Applied only to SNPs. Number is dependent on the data. See below for more detail. Default is 7.81. 
 
 **GDP**: _number_
 
@@ -159,28 +159,28 @@ Used instead of Hardy-Weinberg. Default is -0.8.
 
 **MISS_THRESH_INDI**: _number_
 
-Individual missingness threshold. Default i 0.1.
+Individual missingness threshold. Default is 0.1.
 
 **RELATEDNESS_THRESH**: _number_
 
 Threshold of relatedness, above which we exclude a Sample based on relation to other Samples. Default is .125
 
-
 # How to estimate DP, MQ and VQSLOD thresholds from your own data
 
-using one of your autosomal VCF files (say chr22 for example), create diagnostic plots for the VCF parameters MQ (mapping quality), DP (total read depth) and VQSLOD (variant quality score log-odds):
+using one of your autosomal VCF files (say chr22 for example), create diagnostic plots for the VCF parameters MQ (mapping quality), 
+DP (total read depth) and VQSLOD (variant quality score log-odds):
 
 ```
 cd scripts/
-sh get_quality_metrics <vcf.gz> <data code>
+sh get_quality_metrics.sh <vcf.gz> <output_dir> <output_prefix> <avg_wgs_coverage>
 ```
 
 This will create the folder scripts/<data code> which will contain the raw numbers for each metric along with histograms of each metric.
 
-In our experience, MQ and VQSLOD do not change between datasets but DP does as it corresponds to the total read depth at each base - the average DP being the average per-sample read depth (usually 30X) multiplied by the sample number. 
-
+In our experience, MQ tends to be fairly consistent across datasets and very tightly distributed and should not change between datasets. 
+However, DP does as it corresponds to the total read depth at each base - the average DP being the average per-sample read depth (usually 30X) multiplied by the sample number.
 So 300 samples at 30x coverage should have a median DP of around 9000.
-
+Also VQSLOD may also change depending on the data, we suggest removing variants in the left peak of the bimodal VQSLOD distribution.
 
 # Known bugs
 
