@@ -1,49 +1,49 @@
 __default__:
   #partition: chimera
-  queue: express
+  queue: premium
   cores: 1
   mem: 3750
-  time: '600'
+  time: 144:00
   name: $(basename $(pwd)):{rule}:{wildcards}
   output: logs/{rule}:{wildcards}.stdout
   error: logs/{rule}:{wildcards}.stderr
 annotateVCF:
     cores: 4
     mem: 3000
-    time: 600
+#    time: 600
 liftOverVCFs:
     cores: 4
     mem: 3000
-    time: '360'
+#    time: '360'
 Biallelic_Combine_Indels_and_SNPs:
     cores: 16
     mem: 3750
-    time: '180'
+#    time: '180'
 recombineChunks:
     cores: 8
     mem: 3750
-    time: '180'
+#    time: '180'
 recombineChromosomes:
     cores: 8
     mem: 3750
-    time: '180'
+#    time: '180'
 KingRelatedness:
     cores: 4
     mem: 3750
-    time: '360'
+#    time: '360'
 convertPlinkToVCF:
     cores: 4
     mem: 3750
-    time: '360'
+#    time: '360'
 convertVCFtoPLINK:
     cores: 4
     mem: 3750
-    time: '360'
+#    time: '360'
 removeRelatedSamples:
     cores: 4
     mem: 3750
-    time: '360'
+#    time: '360'
 filterMAF:
     cores: 4
     mem: 3750
-    time: '360'
+#    time: '360'
