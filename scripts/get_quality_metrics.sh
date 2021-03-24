@@ -1,17 +1,23 @@
-
-input=$1
-
-output=$2
-
-
-mkdir $output
 #ml bcftools
+#ml R/3.6.2
 
-bcftools query -f '%DP\n' $input > $output/$output.DP.txt
+# VCF
+input=$1
+# OUTDIR
+output_dir=$2
+# OUTPUT_NAME
+output_name=$3
+# Avg WGS Coverage
+coverage=$4
 
-bcftools query -f '%VQSLOD\n' $input > $output/$output.VQSLOD.txt
+mkdir $output_dir
 
-bcftools query -f '%MQ\n' $input > $output/$output.MQ.txt
+bcftools query -f '%DP\n' $input > $output_dir/$output_name.DP.txt
 
-Rscript plot_quality_metrics.R $output/$output
+bcftools query -f '%VQSLOD\n' $input > $output_dir/$output_name.VQSLOD.txt
 
+bcftools query -f '%MQ\n' $input > $output_dir/$output_name.MQ.txt
+
+bcftools query -l $input > $output_dir/$output_name.samples.txt
+
+Rscript plot_quality_metrics.R $output_dir/$output_name $coverage

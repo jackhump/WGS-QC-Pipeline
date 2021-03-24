@@ -1,11 +1,6 @@
 #!/usr/bin/env bash
 # -m {cluster.partition}"
-source activate snakemake
 set -e
-
-if [ ! -d "cluster" ]; then
-  mkdir cluster
-fi
 
 curdir="$(pwd)"
 jname="$(basename $curdir)"
@@ -38,6 +33,9 @@ while getopts 'c:s:m:inh' flag; do
   esac
 done
 
+if [ ! -d "cluster" ]; then
+  mkdir cluster
+fi
 
 echo config used is $config
 echo snakefile used is $snakefile
@@ -59,7 +57,7 @@ fi
 #exit 0 
 
 bsub=("bsub -K -J $jname:{rule}:{wildcards}"
-"-P acc_als-omics "
+"-P acc_ad-omics "
 "-q {cluster.queue} "
 "-n {cluster.cores} -R \"span[hosts=1] select[mem>{cluster.mem}]"
 "rusage[mem={cluster.mem}]\" -W {cluster.time} -L /bin/bash"
@@ -70,7 +68,7 @@ snakemake -u cluster.yaml --cluster-sync "${bsub[*]}" \
   --local-cores 4 --max-jobs-per-second 5 \
   --keep-going \
   --jobs 1000 \
-  --restart-times 3 \
+  --restart-times 1 \
   -s $snakefile --configfile $config \
   --latency-wait 30 --rerun-incomplete \
   $dryrun \
