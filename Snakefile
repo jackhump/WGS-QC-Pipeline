@@ -7,7 +7,7 @@ print( " authors: Jack Humphrey and Sanan Venkatesh")
 print( " inspired by Adelson et al, 2019")
 
 #1) Set up Variables from Config files
-R_VERSION = "R/3.6.2"
+R_VERSION = "R/4.0.3"
 # should be set to some default conda environment that contains snakemake
 #shell.prefix('ml anaconda3/latest; conda activate WGS-QC-pipeline;')
 
@@ -501,7 +501,7 @@ rule recombineChunks:
         chunk="chunk[0-9]+",
         chr="chr[0-9]+"
     output:
-        tempFolder + '{chr}_Filter8.recode.vcf.gz'
+        temp(tempFolder + '{chr}_Filter8.recode.vcf.gz')
     shell:
         "ml vcftools/0.1.15; ml vcflib/v1.0.0-rc0; ml bcftools/1.9;"
         "bcftools concat {input} | bgzip -c > {output}"
@@ -510,11 +510,12 @@ rule recombineChromosomes:
     input:
         expand(tempFolder + '{chr}_Filter8.recode.vcf.gz', chr = chrs) # expand both chr and allele
     output:
-        recombined = tempFolder + 'chrAll_Recombined.vcf.gz',
+        recombined = temp(tempFolder + 'chrAll_Recombined.vcf.gz'),
         stats = statsFolder + 'chrAll_Recombined_stats.txt'
+    threads: 16
     shell:
         "ml bcftools/1.9;"
-        "bcftools concat {input} | bgzip > {output.recombined};"
+        "bcftools concat --threads {threads} -Oz -o {output.recombined} {input};"
         "bcftools stats {output.recombined} > {output.stats};"
 
 # Set ID  to chr_pos - multiallelic SNPs have been removed already
@@ -527,10 +528,11 @@ rule setID:
         genome =  genomeFASTA
     output:
         vcf = tempFolder + 'chrAll_Recombined.IDs.vcf.gz'
+    threads: 32
     shell:
         "ml bcftools/1.9;"
         #"bcftools norm -Ou --check-ref ws -f {input.genome} | "
-        "bcftools annotate -Oz --output {output.vcf} --set-id +'%CHROM\:%POS' {input.vcf}"
+        "bcftools annotate --threads {threads} -Oz --output {output.vcf} --set-id +'%CHROM\:%POS' {input.vcf}"
 
 ## STEP 4: QC ON ALL DATA TOGETHER IN PLINK
 
