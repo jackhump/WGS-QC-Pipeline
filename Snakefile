@@ -258,7 +258,7 @@ rule Filter0_separateBiallelics:
         chunked = tempFolder + '{chr}_{chunk}_filtered.vcf.gz'
         #chunked = tempFolder + '{chr}_{chunk}_chunked.vcf.gz'
     output:
-        biallelic_vcf = tempFolder + '{chr}' + '_{chunk}_Biallelic.recode.vcf.gz',
+        biallelic_Filter0 = tempFolder + '{chr}' + '_{chunk}_Biallelic.recode.vcf.gz',
         stats = statsFolder + '{chr}' + '_{chunk}_separateBiallelic.stats.txt'
     #group: "per_chunk_filter"
     shell:
