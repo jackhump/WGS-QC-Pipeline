@@ -7,7 +7,7 @@ ml bcftools
 for i in {1..22}; do 
     if [ ! -f homo_sapiens-chr${i}.vcf.gz ]; then
     axel ftp://ftp.ensembl.org/pub/release-99/variation/vcf/homo_sapiens/homo_sapiens-chr${i}.vcf.gz
-    tabix homo_sapiens-chr${i}.vcf.gza
+    tabix homo_sapiens-chr${i}.vcf.gz
     fi
 done
 
